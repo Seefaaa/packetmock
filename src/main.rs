@@ -4,7 +4,7 @@ mod http;
 mod mock;
 mod windivert;
 
-use std::{mem::zeroed, str};
+use std::mem::zeroed;
 
 use env_logger::Env;
 use log::info;
@@ -13,10 +13,9 @@ use windivert_sys::WINDIVERT_ADDRESS;
 use crate::{
     http::is_client_hello,
     mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
-    windivert::WinDivert,
+    windivert::{BUFFER_SIZE, WINDIVERT_FILTER, WinDivert},
 };
 
-const WINDIVERT_FILTER: &str = "outbound and (tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0 and !impostor";
 const TTL: u8 = 4;
 
 fn main() -> color_eyre::Result<()> {
@@ -25,7 +24,7 @@ fn main() -> color_eyre::Result<()> {
 
     let windivert = WinDivert::open(WINDIVERT_FILTER)?;
 
-    let mut buffer = [0; 9016];
+    let mut buffer = [0; BUFFER_SIZE];
     let mut address: WINDIVERT_ADDRESS = unsafe { zeroed() };
 
     info!("Intercepting packets... Press Ctrl+C to stop.");

@@ -1,12 +1,25 @@
 use std::{borrow::Cow, cmp::Ordering, ffi::CString, ptr::null_mut, slice};
 
 use color_eyre::eyre::{ContextCompat, bail};
+use const_format::formatcp as const_format;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use windivert_sys::{
     WINDIVERT_ADDRESS, WINDIVERT_IPHDR, WINDIVERT_LAYER_WINDIVERT_LAYER_NETWORK, WINDIVERT_TCPHDR,
     WinDivertHelperCalcChecksums, WinDivertHelperParsePacket, WinDivertOpen, WinDivertRecv,
     WinDivertSend,
 };
+
+pub const WINDIVERT_FILTER: &str = const_format!(
+    "outbound and (tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0 and tcp.PayloadLength < {BUFFER_SIZE} and !impostor and !loopback and {LAN_FILTER}"
+);
+const LAN_FILTER: &str = "(
+    (ip.DstAddr < 127.0.0.1 or ip.DstAddr > 127.255.255.255) and
+    (ip.DstAddr < 10.0.0.0 or ip.DstAddr > 10.255.255.255) and
+    (ip.DstAddr < 192.168.0.0 or ip.DstAddr > 192.168.255.255) and
+    (ip.DstAddr < 172.16.0.0 or ip.DstAddr > 172.31.255.255) and
+    (ip.DstAddr < 169.254.0.0 or ip.DstAddr > 169.254.255.255)
+)";
+pub const BUFFER_SIZE: usize = 9016;
 
 /// A safe wrapper around a WinDivert handle and associated methods.
 pub struct WinDivert {
