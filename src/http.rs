@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use color_eyre::eyre::bail;
 use memchr::memmem::Finder;
 
-use super::Packet;
+use crate::windivert::Packet;
 
 pub struct HttpHeaders {
     raw: HashMap<String, String>,

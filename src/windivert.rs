@@ -1,5 +1,3 @@
-pub mod http;
-
 use std::{borrow::Cow, cmp::Ordering, ffi::CString, ptr::null_mut, slice};
 
 use color_eyre::eyre::{ContextCompat, bail};

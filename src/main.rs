@@ -1,5 +1,6 @@
 #![cfg(windows)]
 
+mod http;
 mod mock;
 mod windivert;
 
@@ -9,8 +10,9 @@ use log::info;
 use windivert_sys::WINDIVERT_ADDRESS;
 
 use crate::{
+    http::is_client_hello,
     mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
-    windivert::{WinDivert, http::is_client_hello},
+    windivert::WinDivert,
 };
 
 const WINDIVERT_FILTER: &str = "outbound and (tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0 and !impostor";
