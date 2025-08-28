@@ -458,6 +458,7 @@ dependencies = [
  "ctrlc",
  "env_logger",
  "log",
+ "memchr",
  "thiserror",
  "tracing",
  "tracing-subscriber",

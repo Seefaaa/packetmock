@@ -5,7 +5,7 @@ use std::{borrow::Cow, cmp::Ordering, ffi::CString, ptr::null_mut, slice};
 use color_eyre::eyre::{ContextCompat, bail};
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use windivert_sys::{
-    WINDIVERT_ADDRESS, WINDIVERT_IPHDR, WINDIVERT_LAYER_WINDIVERT_LAYER_NETWORK,
+    WINDIVERT_ADDRESS, WINDIVERT_IPHDR, WINDIVERT_LAYER_WINDIVERT_LAYER_NETWORK, WINDIVERT_TCPHDR,
     WinDivertHelperCalcChecksums, WinDivertHelperParsePacket, WinDivertOpen, WinDivertRecv,
     WinDivertSend,
 };
@@ -102,6 +102,7 @@ pub struct Packet<'a> {
     pub addr: Cow<'a, WINDIVERT_ADDRESS>,
 
     ip_header_ptr: *mut WINDIVERT_IPHDR,
+    tcp_header_ptr: *mut WINDIVERT_TCPHDR,
     data_ptr: *mut u8,
     data_length: usize,
 
@@ -115,6 +116,7 @@ impl<'a> Packet<'a> {
         addr: Cow<'b, WINDIVERT_ADDRESS>,
     ) -> color_eyre::Result<Self> {
         let mut ip_header = null_mut();
+        let mut tcp_header = null_mut();
         let mut data = null_mut();
         let mut length = 0;
 
@@ -127,7 +129,7 @@ impl<'a> Packet<'a> {
                 null_mut(),
                 null_mut(),
                 null_mut(),
-                null_mut(),
+                &mut tcp_header,
                 null_mut(),
                 &mut data,
                 &mut length,
@@ -145,6 +147,7 @@ impl<'a> Packet<'a> {
             raw,
             addr,
             ip_header_ptr: ip_header,
+            tcp_header_ptr: tcp_header,
             data_ptr: data as _,
             data_length: length as _,
             recalc_checksums: false,
@@ -155,6 +158,7 @@ impl<'a> Packet<'a> {
     /// This is necessary if the raw data has been modified or reallocated.
     fn reparse(&mut self) -> color_eyre::Result<()> {
         let mut ip_header = null_mut();
+        let mut tcp_header = null_mut();
         let mut data = null_mut();
         let mut length = 0;
 
@@ -167,7 +171,7 @@ impl<'a> Packet<'a> {
                 null_mut(),
                 null_mut(),
                 null_mut(),
-                null_mut(),
+                &mut tcp_header,
                 null_mut(),
                 &mut data,
                 &mut length,
@@ -182,6 +186,7 @@ impl<'a> Packet<'a> {
         }
 
         self.ip_header_ptr = ip_header;
+        self.tcp_header_ptr = tcp_header;
         self.data_ptr = data as _;
         self.data_length = length as _;
 
@@ -231,6 +236,16 @@ impl<'a> Packet<'a> {
     pub fn ip_header_mut(&mut self) -> &mut WINDIVERT_IPHDR {
         self.recalc_checksums = true;
         unsafe { &mut *self.ip_header_ptr }
+    }
+
+    /// Get a reference to the TCP header.
+    ////
+    /// # Safety
+    /// This function is unsafe because it does not check if the TCP header pointer is null. The
+    /// caller must ensure that this condition is met before calling this function.
+    #[inline]
+    pub fn tcp_header(&self) -> &WINDIVERT_TCPHDR {
+        unsafe { &*self.tcp_header_ptr }
     }
 
     /// Recalculate the checksums for the packet.
@@ -292,5 +307,13 @@ impl<'a> Packet<'a> {
         self.data_mut_unchecked().copy_from_slice(data);
 
         Ok(())
+    }
+
+    /// Create a deep copy of the packet, allocating new memory for the raw data and address.
+    pub fn try_clone(&self) -> color_eyre::Result<Self> {
+        let raw = Cow::Owned(self.raw.clone().into_owned());
+        let addr = Cow::Owned(self.addr.clone().into_owned());
+
+        Packet::new(raw, addr)
     }
 }

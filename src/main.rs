@@ -1,26 +1,26 @@
 #![cfg(windows)]
 
+mod mock;
 mod windivert;
 
-use std::mem::zeroed;
+use std::{mem::zeroed, str};
 
-use log::{LevelFilter, info};
+use log::info;
 use windivert_sys::WINDIVERT_ADDRESS;
 
-use crate::windivert::WinDivert;
+use crate::{
+    mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
+    windivert::{WinDivert, http::is_client_hello},
+};
 
-const FAKE_HTTP_REQUEST: &[u8] =
-    b"GET / HTTP/1.1\r\nHost: www.w3.org\r\nUser-Agent: curl/8.14.1\r\nAccept: */*\r\nAccept-Encoding: deflate, gzip, br\r\n\r\n";
+const WINDIVERT_FILTER: &str = "outbound and (tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0 and !impostor";
 const TTL: u8 = 4;
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    env_logger::builder()
-        .filter_level(LevelFilter::Info)
-        .parse_default_env()
-        .init();
+    env_logger::init();
 
-    let windivert = WinDivert::open("outbound and tcp.DstPort == 80 and !impostor")?;
+    let windivert = WinDivert::open(WINDIVERT_FILTER)?;
 
     let mut buffer = [0; 9016];
     let mut address: WINDIVERT_ADDRESS = unsafe { zeroed() };
@@ -28,13 +28,26 @@ fn main() -> color_eyre::Result<()> {
     info!("Intercepting packets... Press Ctrl+C to stop.");
 
     while let Ok(packet) = windivert.recv(&mut buffer, &mut address) {
-        if packet.data().is_some() {
-            let mut packet_copy = packet.clone();
-
-            packet_copy.set_data(FAKE_HTTP_REQUEST)?;
-            packet_copy.ip_header_mut().TTL = TTL;
-
-            windivert.send(packet_copy)?;
+        match u16::from_be(packet.tcp_header().DstPort) {
+            // HTTP
+            80 => {
+                if packet.data().is_some() {
+                    let mut packet_copy = packet.try_clone()?;
+                    packet_copy.set_data(FAKE_HTTP_REQUEST)?;
+                    packet_copy.ip_header_mut().TTL = TTL;
+                    windivert.send(packet_copy)?;
+                }
+            }
+            // HTTPS
+            443 => {
+                if is_client_hello(&packet) {
+                    let mut packet_copy = packet.try_clone()?;
+                    packet_copy.set_data(FAKE_CLIENT_HELLO)?;
+                    packet_copy.ip_header_mut().TTL = TTL;
+                    windivert.send(packet_copy)?;
+                }
+            }
+            _ => unreachable!(),
         }
 
         windivert.send(packet)?;
