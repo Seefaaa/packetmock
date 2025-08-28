@@ -94,7 +94,6 @@ impl WinDivert {
 }
 
 /// A representation of a network packet intercepted by WinDivert.
-#[derive(Clone)]
 pub struct Packet<'a> {
     pub raw: Cow<'a, [u8]>,
     pub addr: Cow<'a, WINDIVERT_ADDRESS>,
