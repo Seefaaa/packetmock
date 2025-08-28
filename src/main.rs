@@ -6,6 +6,7 @@ mod windivert;
 
 use std::{mem::zeroed, str};
 
+use env_logger::Env;
 use log::info;
 use windivert_sys::WINDIVERT_ADDRESS;
 
@@ -20,7 +21,7 @@ const TTL: u8 = 4;
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
-    env_logger::init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     let windivert = WinDivert::open(WINDIVERT_FILTER)?;
 
