@@ -96,3 +96,5 @@ finally {
 }
 
 Write-Host "`nOperation completed successfully! ✅" -ForegroundColor Green
+
+exit 0
