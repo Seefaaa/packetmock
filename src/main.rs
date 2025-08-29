@@ -1,21 +1,26 @@
 #![cfg(windows)]
+#![windows_subsystem = "windows"]
 
 mod http;
 mod mock;
 mod service;
+mod tray;
 mod windivert;
 
 use std::mem::zeroed;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory as _, Parser, Subcommand};
 use env_logger::Env;
 use log::info;
+use smol::{block_on, future::or, unblock};
+use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 use windivert_sys::WINDIVERT_ADDRESS;
 
 use crate::{
     http::is_client_hello,
     mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
     service::{handle_if_service, install_service, start_service, stop_service, uninstall_service},
+    tray::tray,
     windivert::{BUFFER_SIZE, WINDIVERT_FILTER, WinDivert},
 };
 
@@ -46,6 +51,8 @@ enum Commands {
 
 /// Main entry point for the application.
 fn main() -> color_eyre::Result<()> {
+    let is_terminal = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0;
+
     color_eyre::install()?;
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
@@ -54,11 +61,17 @@ fn main() -> color_eyre::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Some(Commands::Run) | None => run()?,
+        Some(Commands::Run) => run()?,
+        None if !is_terminal => run_tray()?,
         Some(Commands::Install) => install_service()?,
         Some(Commands::Uninstall) => uninstall_service()?,
         Some(Commands::Start) => start_service()?,
         Some(Commands::Stop) => stop_service()?,
+        None => Cli::command().print_help()?,
+    }
+
+    if is_terminal {
+        unsafe { FreeConsole() };
     }
 
     Ok(())
@@ -99,4 +112,8 @@ fn run() -> color_eyre::Result<()> {
     }
 
     Ok(())
+}
+
+fn run_tray() -> color_eyre::Result<()> {
+    block_on(or(unblock(tray), unblock(run)))
 }
