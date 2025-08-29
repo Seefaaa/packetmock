@@ -2,6 +2,8 @@
 name = "packetmock"
 version = "0.1.0"
 edition = "2024"
+authors = ["Seefaaa"]
+description = "A tool that mocks network packets to bypass ISP censorship"
 
 [dependencies]
 clap = { version = "4.5.45", features = ["derive"] }
@@ -17,6 +19,8 @@ env_logger = "0.11.8"
 log = "0.4.27"
 memchr = "2.7.5"
 const_format = "0.2.34"
+windows-service = "0.8.0"
+smol = "2.0.2"
 
 [build-dependencies]
 bindgen = "0.72.0"
