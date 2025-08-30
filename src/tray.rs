@@ -48,7 +48,7 @@ const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
 pub fn show_system_tray() -> color_eyre::Result<()> {
-    info!("Creating tray...");
+    info!("Creating tray");
 
     let instance = unsafe { GetModuleHandleW(null()) };
     let icon = unsafe { LoadIconW(instance, 1 as _) };
