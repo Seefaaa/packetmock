@@ -7,22 +7,18 @@ mod service;
 mod tray;
 mod windivert;
 
-use std::mem::zeroed;
+use std::sync::mpsc;
 
 use clap::{CommandFactory as _, Parser, Subcommand};
-use color_eyre::eyre::bail;
 use env_logger::Env;
 use log::{error, info};
 use smol::{block_on, future::or, unblock};
 use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
-use windivert_sys::WINDIVERT_ADDRESS;
 
 use crate::{
-    http::is_client_hello,
-    mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
     service::{handle_if_service, install_service, start_service, stop_service, uninstall_service},
     tray::show_system_tray,
-    windivert::{BUFFER_SIZE, WINDIVERT_FILTER, WinDivert},
+    windivert::intercept,
 };
 
 const TTL: u8 = 4;
@@ -86,45 +82,22 @@ fn main() -> color_eyre::Result<()> {
 }
 
 fn run() -> color_eyre::Result<()> {
-    let windivert = WinDivert::open(WINDIVERT_FILTER)?;
+    let (sx, rx) = mpsc::channel();
 
-    let mut buffer = [0; BUFFER_SIZE];
-    let mut address: WINDIVERT_ADDRESS = unsafe { zeroed() };
+    ctrlc::set_handler(move || {
+        sx.send(()).expect("Could not send terminate signal");
+    })?;
 
-    info!("Intercepting packets");
-
-    loop {
-        match windivert.recv(&mut buffer, &mut address) {
-            Ok(packet) => {
-                match u16::from_be(packet.tcp_header().DstPort) {
-                    // HTTP
-                    80 => {
-                        if packet.data().is_some() {
-                            let mut packet_copy = packet.try_clone()?;
-                            packet_copy.set_data(FAKE_HTTP_REQUEST)?;
-                            packet_copy.ip_header_mut().TTL = TTL;
-                            windivert.send(packet_copy)?;
-                        }
-                    }
-                    // HTTPS
-                    443 => {
-                        if is_client_hello(&packet) {
-                            let mut packet_copy = packet.try_clone()?;
-                            packet_copy.set_data(FAKE_CLIENT_HELLO)?;
-                            packet_copy.ip_header_mut().TTL = TTL;
-                            windivert.send(packet_copy)?;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-
-                windivert.send(packet)?;
-            }
-            Err(e) => {
-                bail!("Failed to receive packet: {e:?}");
-            }
-        }
-    }
+    block_on(or(
+        unblock(move || {
+            match rx.recv() {
+                Ok(_) => info!("Terminate signal received."),
+                Err(e) => error!("Failed to receive terminate signal: {e}"),
+            };
+            Ok(())
+        }),
+        unblock(intercept),
+    ))
 }
 
 fn run_tray() -> color_eyre::Result<()> {

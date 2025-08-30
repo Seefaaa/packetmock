@@ -1,12 +1,19 @@
-use std::{borrow::Cow, cmp::Ordering, ffi::CString, ptr::null_mut, slice};
+use std::{borrow::Cow, cmp::Ordering, ffi::CString, mem::zeroed, ptr::null_mut, slice};
 
 use color_eyre::eyre::{ContextCompat, bail};
 use const_format::formatcp as const_format;
+use log::info;
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use windivert_sys::{
     WINDIVERT_ADDRESS, WINDIVERT_IPHDR, WINDIVERT_LAYER_WINDIVERT_LAYER_NETWORK, WINDIVERT_TCPHDR,
     WinDivertHelperCalcChecksums, WinDivertHelperParsePacket, WinDivertOpen, WinDivertRecv,
     WinDivertSend,
+};
+
+use crate::{
+    TTL,
+    http::is_client_hello,
+    mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
 };
 
 pub const WINDIVERT_FILTER: &str = const_format!(
@@ -325,5 +332,48 @@ impl<'a> Packet<'a> {
         let addr = Cow::Owned(self.addr.clone().into_owned());
 
         Packet::new(raw, addr)
+    }
+}
+
+/// Start intercepting packets and modifying them as necessary.
+pub fn intercept() -> color_eyre::Result<()> {
+    let windivert = WinDivert::open(WINDIVERT_FILTER)?;
+
+    let mut buffer = [0; BUFFER_SIZE];
+    let mut address: WINDIVERT_ADDRESS = unsafe { zeroed() };
+
+    info!("Intercepting packets");
+
+    loop {
+        match windivert.recv(&mut buffer, &mut address) {
+            Ok(packet) => {
+                match u16::from_be(packet.tcp_header().DstPort) {
+                    // HTTP
+                    80 => {
+                        if packet.data().is_some() {
+                            let mut packet_copy = packet.try_clone()?;
+                            packet_copy.set_data(FAKE_HTTP_REQUEST)?;
+                            packet_copy.ip_header_mut().TTL = TTL;
+                            windivert.send(packet_copy)?;
+                        }
+                    }
+                    // HTTPS
+                    443 => {
+                        if is_client_hello(&packet) {
+                            let mut packet_copy = packet.try_clone()?;
+                            packet_copy.set_data(FAKE_CLIENT_HELLO)?;
+                            packet_copy.ip_header_mut().TTL = TTL;
+                            windivert.send(packet_copy)?;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+
+                windivert.send(packet)?;
+            }
+            Err(e) => {
+                bail!("Failed to receive packet: {e:?}");
+            }
+        }
     }
 }
