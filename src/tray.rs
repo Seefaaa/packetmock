@@ -1,17 +1,18 @@
+mod menu;
+mod toast;
+mod window;
+
 use std::{
-    env::temp_dir,
-    ffi::OsStr,
-    fs::{create_dir_all, write},
-    iter::once,
     mem::{size_of, zeroed},
-    os::windows::ffi::OsStrExt as _,
     ptr::{null, null_mut},
 };
 
-use color_eyre::eyre::bail;
-use log::{error, info};
+use log::info;
 use winapi::{
-    shared::guiddef::GUID,
+    shared::{
+        guiddef::GUID,
+        windef::{HICON, HWND},
+    },
     um::{
         libloaderapi::GetModuleHandleW,
         shellapi::{
@@ -19,94 +20,62 @@ use winapi::{
             NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONDATAW_u, Shell_NotifyIconW,
         },
         winuser::{
-            CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            DispatchMessageW, GetCursorPos, GetMessageW, InsertMenuItemW, LoadIconW, MENUITEMINFOW,
-            MIIM_ID, MIIM_STRING, PostMessageW, PostQuitMessage, RegisterClassExW,
-            SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
-            TPM_RIGHTBUTTON, TPM_VERPOSANIMATION, TrackPopupMenuEx, TranslateMessage, WM_APP,
-            WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW,
+            DefWindowProcW, LoadIconW, PostQuitMessage, WM_APP, WM_DESTROY, WM_LBUTTONUP,
+            WM_NCCREATE, WM_RBUTTONUP,
         },
     },
 };
-use windows::{
-    UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType},
-    core::w,
+use windows::core::{PCWSTR, w};
+
+use self::{
+    menu::{
+        MENU_ID_EXIT, MENU_ID_INSTALL_SERVICE, MENU_ID_START_SERVICE, MENU_ID_STOP_SERVICE,
+        MENU_ID_UNINSTALL_SERVICE, show_popup_menu,
+    },
+    toast::show_toast,
+    window::Window,
 };
-use windows_registry::LOCAL_MACHINE;
 
-const WINDOW_NAME: &str = "Packetmock";
-const WINDOW_CLASS: &str = "packetmockwndcls";
+const WINDOW_NAME: PCWSTR = w!("Packetmock");
+const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 
-const TRAY_TOOLTIP: &str = "Packetmock";
-
-const TOAST_DISPLAY_NAME: &str = "Packetmock";
-const TOAST_APPID: &str = "Seefaaa.Packetmock";
-const TOAST_ICON: &[u8] = include_bytes!("../resources/pink48.png");
-const TOAST_ICON_TEMP: &str = "toast.png";
+const TRAY_TOOLTIP: PCWSTR = WINDOW_NAME;
 
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
-pub fn show_system_tray() -> color_eyre::Result<()> {
+pub fn show_tray_icon() -> color_eyre::Result<()> {
     info!("Creating tray");
 
     let instance = unsafe { GetModuleHandleW(null()) };
     let icon = unsafe { LoadIconW(instance, 1 as _) };
+    let window = Window::new(instance, WINDOW_CLASS, WINDOW_NAME, icon, Some(wnd_proc))?;
 
-    let class_name = wide(WINDOW_CLASS);
-    let window_name = wide(WINDOW_NAME);
+    create_tray_icon(window, icon);
+    show_toast("Running in system tray")?;
 
-    let window_class = WNDCLASSEXW {
-        cbSize: size_of::<WNDCLASSEXW>() as _,
-        style: 0,
-        lpfnWndProc: Some(wnd_proc),
-        cbClsExtra: 0,
-        cbWndExtra: 0,
-        hInstance: instance,
-        hIcon: icon,
-        hCursor: null_mut(),
-        hbrBackground: null_mut(),
-        lpszMenuName: null(),
-        lpszClassName: class_name.as_ptr(),
-        hIconSm: icon,
-    };
+    window.event_loop();
 
-    if unsafe { RegisterClassExW(&window_class) } == 0 {
-        bail!("Failed to register window class");
-    }
+    info!("Tray exited");
 
-    let window = unsafe {
-        CreateWindowExW(
-            0,
-            class_name.as_ptr(),
-            window_name.as_ptr(),
-            0,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            CW_USEDEFAULT,
-            null_mut(),
-            null_mut(),
-            instance,
-            null_mut(),
-        )
-    };
+    Window::drop(window);
 
-    if window.is_null() {
-        bail!("Failed to create window");
-    }
+    Ok(())
+}
 
-    let mut tooltip = [0u16; 128];
-    tooltip[..TRAY_TOOLTIP.len() + 1].copy_from_slice(&wide(TRAY_TOOLTIP));
-
+fn create_tray_icon(window: &Window, icon: HICON) {
     let mut notify_icon = NOTIFYICONDATAW {
         cbSize: size_of::<NOTIFYICONDATAW>() as _,
-        hWnd: window,
+        hWnd: window.hwnd,
         uID: 0,
         uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID | NIF_SHOWTIP,
         uCallbackMessage: WMAPP_NOTIFYCALLBACK,
         hIcon: icon,
-        szTip: tooltip,
+        szTip: {
+            let mut tip = [0; 128];
+            unsafe { tip[..TRAY_TOOLTIP.len()].copy_from_slice(TRAY_TOOLTIP.as_wide()) };
+            tip
+        },
         dwState: 0,
         dwStateMask: 0,
         szInfo: [0; 256],
@@ -130,105 +99,23 @@ pub fn show_system_tray() -> color_eyre::Result<()> {
         Shell_NotifyIconW(NIM_ADD, &mut notify_icon);
         Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
     }
-
-    show_toast("Running in system tray")?;
-
-    unsafe {
-        let mut message = zeroed();
-
-        while GetMessageW(&mut message, null_mut(), 0, 0) != 0 {
-            TranslateMessage(&message);
-            DispatchMessageW(&message);
-        }
-    }
-
-    info!("Tray exited");
-
-    Ok(())
 }
 
-unsafe extern "system" fn wnd_proc(
-    hwnd: winapi::shared::windef::HWND,
-    msg: u32,
-    wparam: usize,
-    lparam: isize,
-) -> isize {
+unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
-        WM_DESTROY => unsafe {
-            PostQuitMessage(0);
-            return 0;
-        },
+        WM_NCCREATE => Window::nc_create(hwnd, lparam),
+        WM_DESTROY => unsafe { PostQuitMessage(0) },
         WMAPP_NOTIFYCALLBACK => match lparam as u32 {
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
-                let menu = CreatePopupMenu();
-
-                let items = [
-                    #[cfg(debug_assertions)]
-                    (w!("Show Toast"), 1001),
-                    (w!("Exit"), 1000),
-                ];
-
-                for (pos, item) in items.iter().enumerate() {
-                    let menu_item = MENUITEMINFOW {
-                        cbSize: size_of::<MENUITEMINFOW>() as _,
-                        fMask: MIIM_ID | MIIM_STRING,
-                        fType: 0,
-                        fState: 0,
-                        wID: item.1,
-                        hSubMenu: null_mut(),
-                        hbmpChecked: null_mut(),
-                        hbmpUnchecked: null_mut(),
-                        dwItemData: 0,
-                        dwTypeData: item.0.as_ptr() as _,
-                        cch: (item.0.len() - 1) as _,
-                        hbmpItem: null_mut(),
-                    };
-
-                    if InsertMenuItemW(menu, pos as _, 1, &menu_item) == 0 {
-                        error!("Failed to insert menu item");
-                        DestroyMenu(menu);
-                        return 0;
-                    }
-                }
-
-                let pos = {
-                    let mut point = zeroed();
-                    GetCursorPos(&mut point);
-                    point
-                };
-
-                SetForegroundWindow(hwnd);
-
-                let result = TrackPopupMenuEx(
-                    menu,
-                    TPM_LEFTALIGN
-                        | TPM_BOTTOMALIGN
-                        | TPM_NONOTIFY
-                        | TPM_RETURNCMD
-                        | TPM_RIGHTBUTTON
-                        | TPM_VERPOSANIMATION,
-                    pos.x,
-                    pos.y,
-                    hwnd,
-                    null_mut(),
-                );
-
-                match result {
-                    1000 => {
-                        PostQuitMessage(0);
-                    }
-                    #[cfg(debug_assertions)]
-                    1001 => {
-                        if let Err(e) = show_toast("This is a test toast") {
-                            error!("Failed to show toast: {e}");
-                        }
-                    }
+                match show_popup_menu(hwnd) {
+                    MENU_ID_START_SERVICE => {}
+                    MENU_ID_STOP_SERVICE => {}
+                    MENU_ID_INSTALL_SERVICE => {}
+                    MENU_ID_UNINSTALL_SERVICE => {}
+                    MENU_ID_EXIT => PostQuitMessage(0),
                     _ => {}
-                }
-
-                DestroyMenu(menu);
-                PostMessageW(hwnd, 0, 0, 0);
+                };
             },
             _ => {}
         },
@@ -236,43 +123,4 @@ unsafe extern "system" fn wnd_proc(
     };
 
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
-}
-
-fn wide(arg: &str) -> Vec<u16> {
-    OsStr::new(arg).encode_wide().chain(once(0)).collect()
-}
-
-fn show_toast(message: &str) -> color_eyre::Result<()> {
-    let temp = temp_dir().join(TOAST_APPID);
-    create_dir_all(&temp)?;
-    let icon_path = temp.join(TOAST_ICON_TEMP);
-    write(&icon_path, TOAST_ICON)?;
-
-    let key = LOCAL_MACHINE
-        .options()
-        .volatile()
-        .read()
-        .write()
-        .create()
-        .open(format!("Software\\Classes\\AppUserModelId\\{TOAST_APPID}"))?;
-
-    key.set_string("DisplayName", TOAST_DISPLAY_NAME)?;
-    key.set_string("IconUri", icon_path.to_string_lossy().as_ref())?;
-
-    let toast_template = ToastTemplateType::ToastImageAndText01;
-    let toast_xml = ToastNotificationManager::GetTemplateContent(toast_template)?;
-
-    let text_elements = toast_xml.GetElementsByTagName(&"text".into())?;
-
-    if text_elements.Length()? > 0 {
-        let message_element = text_elements.Item(0)?;
-        message_element.SetInnerText(&message.into())?;
-    }
-
-    let toast = ToastNotification::CreateToastNotification(&toast_xml)?;
-
-    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&TOAST_APPID.into())?;
-    notifier.Show(&toast)?;
-
-    Ok(())
 }

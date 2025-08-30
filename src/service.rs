@@ -12,11 +12,12 @@ use smol::{block_on, future, unblock};
 use windows_service::{
     define_windows_service,
     service::{
-        ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceState, ServiceStatus,
+        self, ServiceAccess, ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceStatus,
         ServiceType,
     },
     service_control_handler::{self, ServiceControlHandlerResult},
     service_dispatcher,
+    service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
 pub const SERVICE_NAME: &str = "PacketmockService";
@@ -63,7 +64,7 @@ fn run_service() -> color_eyre::Result<()> {
 
     status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
-        current_state: ServiceState::Running,
+        current_state: service::ServiceState::Running,
         controls_accepted: ServiceControlAccept::STOP,
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
@@ -79,12 +80,12 @@ fn run_service() -> color_eyre::Result<()> {
             };
             Ok(())
         }),
-        unblock(crate::run),
+        unblock(crate::run_cli),
     ))?;
 
     status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
-        current_state: ServiceState::Stopped,
+        current_state: service::ServiceState::Stopped,
         controls_accepted: ServiceControlAccept::empty(),
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
@@ -177,4 +178,51 @@ pub fn stop_service() -> color_eyre::Result<()> {
     }
 
     Ok(())
+}
+
+pub fn query_service() -> color_eyre::Result<ServiceState> {
+    let service_manager =
+        ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+
+    let service = match service_manager.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS) {
+        Ok(s) => s,
+        Err(e) => match e {
+            windows_service::Error::Winapi(e) if e.raw_os_error() == Some(1060) => {
+                return Ok(ServiceState::NotInstalled);
+            }
+            _ => return Err(e.into()),
+        },
+    };
+
+    let status = service.query_status()?;
+
+    log::debug!("Service status: {status:?}");
+
+    Ok(status.current_state.into())
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ServiceState {
+    NotInstalled,
+    Stopped,
+    StartPending,
+    StopPending,
+    Running,
+    ContinuePending,
+    PausePending,
+    Paused,
+}
+
+impl From<service::ServiceState> for ServiceState {
+    fn from(state: service::ServiceState) -> Self {
+        match state {
+            service::ServiceState::Stopped => ServiceState::Stopped,
+            service::ServiceState::StartPending => ServiceState::StartPending,
+            service::ServiceState::StopPending => ServiceState::StopPending,
+            service::ServiceState::Running => ServiceState::Running,
+            service::ServiceState::ContinuePending => ServiceState::ContinuePending,
+            service::ServiceState::PausePending => ServiceState::PausePending,
+            service::ServiceState::Paused => ServiceState::Paused,
+        }
+    }
 }

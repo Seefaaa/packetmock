@@ -17,7 +17,7 @@ use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 
 use crate::{
     service::{handle_if_service, install_service, start_service, stop_service, uninstall_service},
-    tray::show_system_tray,
+    tray::show_tray_icon,
     windivert::intercept,
 };
 
@@ -61,7 +61,7 @@ fn main() -> color_eyre::Result<()> {
     let cli = Cli::parse();
 
     if let Err(e) = match cli.command {
-        Some(Commands::Run) => run(),
+        Some(Commands::Run) => run_cli(),
         None if !is_terminal => run_tray(),
         Some(Commands::Install) => install_service(),
         Some(Commands::Uninstall) => uninstall_service(),
@@ -81,7 +81,7 @@ fn main() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn run() -> color_eyre::Result<()> {
+fn run_cli() -> color_eyre::Result<()> {
     let (sx, rx) = mpsc::channel();
 
     ctrlc::set_handler(move || {
@@ -101,5 +101,5 @@ fn run() -> color_eyre::Result<()> {
 }
 
 fn run_tray() -> color_eyre::Result<()> {
-    block_on(or(unblock(show_system_tray), unblock(run)))
+    block_on(or(unblock(show_tray_icon), unblock(run_cli)))
 }
