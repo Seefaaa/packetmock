@@ -3,7 +3,7 @@ use std::{borrow::Cow, cmp::Ordering, ffi::CString, mem::zeroed, ptr::null_mut, 
 use color_eyre::eyre::{ContextCompat, bail};
 use const_format::formatcp as const_format;
 use log::info;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
+use winapi::um::{errhandlingapi::GetLastError, handleapi::INVALID_HANDLE_VALUE};
 use windivert_sys::{
     WINDIVERT_ADDRESS, WINDIVERT_IPHDR, WINDIVERT_LAYER_WINDIVERT_LAYER_NETWORK, WINDIVERT_TCPHDR,
     WinDivertHelperCalcChecksums, WinDivertHelperParsePacket, WinDivertOpen, WinDivertRecv,
@@ -50,7 +50,7 @@ impl WinDivert {
         };
 
         if handle == INVALID_HANDLE_VALUE as _ {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to open WinDivert handle: {err_code}");
         }
 
@@ -78,7 +78,7 @@ impl WinDivert {
         };
 
         if result == 0 {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to receive packet: {err_code}");
         }
 
@@ -104,7 +104,7 @@ impl WinDivert {
         };
 
         if result == 0 {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to send packet: {err_code}");
         }
 
@@ -155,7 +155,7 @@ impl<'a> Packet<'a> {
         };
 
         if result == 0 {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to parse packet: {err_code}");
         }
 
@@ -197,7 +197,7 @@ impl<'a> Packet<'a> {
         };
 
         if result == 0 {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to parse packet: {err_code}");
         }
 
@@ -277,7 +277,7 @@ impl<'a> Packet<'a> {
         };
 
         if result == 0 {
-            let err_code = unsafe { windivert_sys::GetLastError() };
+            let err_code = unsafe { GetLastError() };
             bail!("Failed to calculate checksums: {err_code}");
         }
 

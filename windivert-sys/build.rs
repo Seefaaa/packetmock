@@ -38,6 +38,27 @@ fn main() -> Result<(), Box<dyn Error>> {
         .header(header_file.to_string_lossy())
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .derive_debug(true)
+        // Include WinDivert items
+        .allowlist_type("WINDIVERT_.*")
+        .allowlist_function("WinDivert.*")
+        .allowlist_var("WINDIVERT_.*")
+        // Required Windows types
+        .allowlist_type("HANDLE")
+        .allowlist_type("BOOL")
+        .allowlist_type("DWORD")
+        .allowlist_type("UINT.*")
+        .allowlist_type("INT.*")
+        .allowlist_type("PVOID")
+        .allowlist_type("OVERLAPPED")
+        .allowlist_type("LPOVERLAPPED")
+        // Exclude problematic items
+        .blocklist_function(
+            ".*(?i:createfile|openprocess|createthread|messagebox|winmain|dllmain).*",
+        )
+        .blocklist_type("IMAGE_.*")
+        .blocklist_type("PROCESS_INFORMATION")
+        .blocklist_type("STARTUPINFO.*")
+        .blocklist_type("SECURITY_.*")
         .generate()?;
 
     let out_path = PathBuf::from(var("OUT_DIR")?);
