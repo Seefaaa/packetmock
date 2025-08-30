@@ -38,6 +38,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         .header(header_file.to_string_lossy())
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .derive_debug(true)
+        .derive_default(true)
+        .generate_comments(false) // Reduce noise
+        .layout_tests(false) // Reduce generated test code
         // Include WinDivert items
         .allowlist_type("WINDIVERT_.*")
         .allowlist_function("WinDivert.*")
