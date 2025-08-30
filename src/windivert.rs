@@ -12,8 +12,7 @@ use windivert_sys::{
 
 use crate::{
     TTL,
-    http::is_client_hello,
-    mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
+    http::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST, is_client_hello},
 };
 
 pub const WINDIVERT_FILTER: &str = const_format!(

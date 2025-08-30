@@ -2,7 +2,6 @@
 #![windows_subsystem = "windows"]
 
 mod http;
-mod mock;
 mod service;
 mod tray;
 mod windivert;
