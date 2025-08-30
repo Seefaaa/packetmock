@@ -5,6 +5,9 @@ edition = "2024"
 authors = ["Seefaaa"]
 description = "A tool that mocks network packets to bypass ISP censorship"
 
+[workspace]
+members = [".", "windivert-sys"]
+
 [dependencies]
 clap = { version = "4.5.45", features = ["derive"] }
 color-eyre = "0.6.5"
@@ -20,5 +23,4 @@ windows-registry = "0.5.3"
 ctrlc = { version = "3.4.7", features = ["termination"] }
 
 [build-dependencies]
-bindgen = "0.72.0"
 winres = "0.1.12"
