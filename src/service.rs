@@ -20,6 +20,8 @@ use windows_service::{
     service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
+use crate::cli::run_cli;
+
 pub const SERVICE_NAME: &str = "PacketmockService";
 const SERVICE_DISPLAY_NAME: &str = "Packetmock Service";
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
@@ -80,7 +82,7 @@ fn run_service() -> color_eyre::Result<()> {
             };
             Ok(())
         }),
-        unblock(crate::run_cli),
+        unblock(run_cli),
     ))?;
 
     status_handle.set_service_status(ServiceStatus {
