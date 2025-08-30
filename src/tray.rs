@@ -32,7 +32,7 @@ use windows::{
     UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType},
     core::w,
 };
-use windows_registry::CURRENT_USER;
+use windows_registry::LOCAL_MACHINE;
 
 const WINDOW_NAME: &str = "Packetmock";
 const WINDOW_CLASS: &str = "packetmockwndcls";
@@ -41,7 +41,7 @@ const TRAY_TOOLTIP: &str = "Packetmock";
 
 const TOAST_DISPLAY_NAME: &str = "Packetmock";
 const TOAST_APPID: &str = "Seefaaa.Packetmock";
-const TOAST_ICON: &[u8] = include_bytes!("../resources/toast.png");
+const TOAST_ICON: &[u8] = include_bytes!("../resources/pink48.png");
 const TOAST_ICON_TEMP: &str = "toast.png";
 
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
@@ -163,25 +163,33 @@ unsafe extern "system" fn wnd_proc(
             WM_RBUTTONUP => unsafe {
                 let menu = CreatePopupMenu();
 
-                let exit = MENUITEMINFOW {
-                    cbSize: size_of::<MENUITEMINFOW>() as _,
-                    fMask: MIIM_ID | MIIM_STRING,
-                    fType: 0,
-                    fState: 0,
-                    wID: 1000,
-                    hSubMenu: null_mut(),
-                    hbmpChecked: null_mut(),
-                    hbmpUnchecked: null_mut(),
-                    dwItemData: 0,
-                    dwTypeData: w!("Exit").as_ptr() as _,
-                    cch: 4,
-                    hbmpItem: null_mut(),
-                };
+                let items = [
+                    #[cfg(debug_assertions)]
+                    (w!("Show Toast"), 1001),
+                    (w!("Exit"), 1000),
+                ];
 
-                if InsertMenuItemW(menu, 0, 1, &exit) == 0 {
-                    error!("Failed to insert menu item");
-                    DestroyMenu(menu);
-                    return 0;
+                for (pos, item) in items.iter().enumerate() {
+                    let menu_item = MENUITEMINFOW {
+                        cbSize: size_of::<MENUITEMINFOW>() as _,
+                        fMask: MIIM_ID | MIIM_STRING,
+                        fType: 0,
+                        fState: 0,
+                        wID: item.1,
+                        hSubMenu: null_mut(),
+                        hbmpChecked: null_mut(),
+                        hbmpUnchecked: null_mut(),
+                        dwItemData: 0,
+                        dwTypeData: item.0.as_ptr() as _,
+                        cch: (item.0.len() - 1) as _,
+                        hbmpItem: null_mut(),
+                    };
+
+                    if InsertMenuItemW(menu, pos as _, 1, &menu_item) == 0 {
+                        error!("Failed to insert menu item");
+                        DestroyMenu(menu);
+                        return 0;
+                    }
                 }
 
                 let pos = {
@@ -206,9 +214,18 @@ unsafe extern "system" fn wnd_proc(
                     null_mut(),
                 );
 
-                if result == 1000 {
-                    PostQuitMessage(0);
-                };
+                match result {
+                    1000 => {
+                        PostQuitMessage(0);
+                    }
+                    #[cfg(debug_assertions)]
+                    1001 => {
+                        if let Err(e) = show_toast("This is a test toast") {
+                            error!("Failed to show toast: {e}");
+                        }
+                    }
+                    _ => {}
+                }
 
                 DestroyMenu(menu);
                 PostMessageW(hwnd, 0, 0, 0);
@@ -231,7 +248,7 @@ fn show_toast(message: &str) -> color_eyre::Result<()> {
     let icon_path = temp.join(TOAST_ICON_TEMP);
     write(&icon_path, TOAST_ICON)?;
 
-    let key = CURRENT_USER
+    let key = LOCAL_MACHINE
         .options()
         .volatile()
         .read()
