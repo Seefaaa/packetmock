@@ -9,7 +9,7 @@ use std::{
 };
 
 use color_eyre::eyre::bail;
-use log::info;
+use log::{error, info};
 use winapi::{
     shared::guiddef::GUID,
     um::{
@@ -19,13 +19,19 @@ use winapi::{
             NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONDATAW_u, Shell_NotifyIconW,
         },
         winuser::{
-            CW_USEDEFAULT, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW,
-            LoadIconW, PostQuitMessage, RegisterClassExW, TranslateMessage, WM_APP, WM_DESTROY,
-            WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW,
+            CW_USEDEFAULT, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
+            DispatchMessageW, GetCursorPos, GetMessageW, InsertMenuItemW, LoadIconW, MENUITEMINFOW,
+            MIIM_ID, MIIM_STRING, PostMessageW, PostQuitMessage, RegisterClassExW,
+            SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
+            TPM_RIGHTBUTTON, TPM_VERPOSANIMATION, TrackPopupMenuEx, TranslateMessage, WM_APP,
+            WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW,
         },
     },
 };
-use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType};
+use windows::{
+    UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType},
+    core::w,
+};
 use windows_registry::CURRENT_USER;
 
 const WINDOW_NAME: &str = "Packetmock";
@@ -148,23 +154,71 @@ unsafe extern "system" fn wnd_proc(
     lparam: isize,
 ) -> isize {
     match msg {
-        WM_DESTROY => {
-            unsafe { PostQuitMessage(0) };
-            0
-        }
-        WMAPP_NOTIFYCALLBACK => match lparam as u32 {
-            WM_LBUTTONUP => {
-                //
-                0
-            }
-            WM_RBUTTONUP => {
-                unsafe { PostQuitMessage(0) };
-                0
-            }
-            _ => 0,
+        WM_DESTROY => unsafe {
+            PostQuitMessage(0);
+            return 0;
         },
-        _ => unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) },
-    }
+        WMAPP_NOTIFYCALLBACK => match lparam as u32 {
+            WM_LBUTTONUP => {}
+            WM_RBUTTONUP => unsafe {
+                let menu = CreatePopupMenu();
+
+                let exit = MENUITEMINFOW {
+                    cbSize: size_of::<MENUITEMINFOW>() as _,
+                    fMask: MIIM_ID | MIIM_STRING,
+                    fType: 0,
+                    fState: 0,
+                    wID: 1000,
+                    hSubMenu: null_mut(),
+                    hbmpChecked: null_mut(),
+                    hbmpUnchecked: null_mut(),
+                    dwItemData: 0,
+                    dwTypeData: w!("Exit").as_ptr() as _,
+                    cch: 4,
+                    hbmpItem: null_mut(),
+                };
+
+                if InsertMenuItemW(menu, 0, 1, &exit) == 0 {
+                    error!("Failed to insert menu item");
+                    DestroyMenu(menu);
+                    return 0;
+                }
+
+                let pos = {
+                    let mut point = zeroed();
+                    GetCursorPos(&mut point);
+                    point
+                };
+
+                SetForegroundWindow(hwnd);
+
+                let result = TrackPopupMenuEx(
+                    menu,
+                    TPM_LEFTALIGN
+                        | TPM_BOTTOMALIGN
+                        | TPM_NONOTIFY
+                        | TPM_RETURNCMD
+                        | TPM_RIGHTBUTTON
+                        | TPM_VERPOSANIMATION,
+                    pos.x,
+                    pos.y,
+                    hwnd,
+                    null_mut(),
+                );
+
+                if result == 1000 {
+                    PostQuitMessage(0);
+                };
+
+                DestroyMenu(menu);
+                PostMessageW(hwnd, 0, 0, 0);
+            },
+            _ => {}
+        },
+        _ => {}
+    };
+
+    unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
 fn wide(arg: &str) -> Vec<u16> {
