@@ -1,5 +1,7 @@
 use std::{
+    env::temp_dir,
     ffi::OsStr,
+    fs::{create_dir_all, write},
     iter::once,
     mem::{size_of, zeroed},
     os::windows::ffi::OsStrExt as _,
@@ -23,15 +25,23 @@ use winapi::{
         },
     },
 };
+use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType};
+use windows_registry::CURRENT_USER;
 
 const WINDOW_NAME: &str = "Packetmock";
 const WINDOW_CLASS: &str = "packetmockwndcls";
-const TOOLTIP: &str = "Packetmock";
+
+const TRAY_TOOLTIP: &str = "Packetmock";
+
+const TOAST_DISPLAY_NAME: &str = "Packetmock";
+const TOAST_APPID: &str = "Seefaaa.Packetmock";
+const TOAST_ICON: &[u8] = include_bytes!("../resources/toast.png");
+const TOAST_ICON_TEMP: &str = "toast.png";
 
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
-pub fn tray() -> color_eyre::Result<()> {
+pub fn show_system_tray() -> color_eyre::Result<()> {
     info!("Creating tray...");
 
     let instance = unsafe { GetModuleHandleW(null()) };
@@ -81,7 +91,7 @@ pub fn tray() -> color_eyre::Result<()> {
     }
 
     let mut tooltip = [0u16; 128];
-    tooltip[..TOOLTIP.len() + 1].copy_from_slice(&wide(TOOLTIP));
+    tooltip[..TRAY_TOOLTIP.len() + 1].copy_from_slice(&wide(TRAY_TOOLTIP));
 
     let mut notify_icon = NOTIFYICONDATAW {
         cbSize: size_of::<NOTIFYICONDATAW>() as _,
@@ -115,6 +125,8 @@ pub fn tray() -> color_eyre::Result<()> {
         Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
     }
 
+    show_toast("Running in system tray")?;
+
     unsafe {
         let mut message = zeroed();
 
@@ -124,7 +136,7 @@ pub fn tray() -> color_eyre::Result<()> {
         }
     }
 
-    info!("Tray exiting...");
+    info!("Tray exited");
 
     Ok(())
 }
@@ -157,4 +169,39 @@ unsafe extern "system" fn wnd_proc(
 
 fn wide(arg: &str) -> Vec<u16> {
     OsStr::new(arg).encode_wide().chain(once(0)).collect()
+}
+
+fn show_toast(message: &str) -> color_eyre::Result<()> {
+    let temp = temp_dir().join(TOAST_APPID);
+    create_dir_all(&temp)?;
+    let icon_path = temp.join(TOAST_ICON_TEMP);
+    write(&icon_path, TOAST_ICON)?;
+
+    let key = CURRENT_USER
+        .options()
+        .volatile()
+        .read()
+        .write()
+        .create()
+        .open(format!("Software\\Classes\\AppUserModelId\\{TOAST_APPID}"))?;
+
+    key.set_string("DisplayName", TOAST_DISPLAY_NAME)?;
+    key.set_string("IconUri", icon_path.to_string_lossy().as_ref())?;
+
+    let toast_template = ToastTemplateType::ToastImageAndText01;
+    let toast_xml = ToastNotificationManager::GetTemplateContent(toast_template)?;
+
+    let text_elements = toast_xml.GetElementsByTagName(&"text".into())?;
+
+    if text_elements.Length()? > 0 {
+        let message_element = text_elements.Item(0)?;
+        message_element.SetInnerText(&message.into())?;
+    }
+
+    let toast = ToastNotification::CreateToastNotification(&toast_xml)?;
+
+    let notifier = ToastNotificationManager::CreateToastNotifierWithId(&TOAST_APPID.into())?;
+    notifier.Show(&toast)?;
+
+    Ok(())
 }

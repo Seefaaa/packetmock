@@ -20,7 +20,7 @@ use crate::{
     http::is_client_hello,
     mock::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST},
     service::{handle_if_service, install_service, start_service, stop_service, uninstall_service},
-    tray::tray,
+    tray::show_system_tray,
     windivert::{BUFFER_SIZE, WINDIVERT_FILTER, WinDivert},
 };
 
@@ -47,6 +47,9 @@ enum Commands {
     Start,
     /// Stop Windows service
     Stop,
+    /// Run as system tray application (debug only)
+    #[cfg(debug_assertions)]
+    RunTray,
 }
 
 /// Main entry point for the application.
@@ -68,6 +71,8 @@ fn main() -> color_eyre::Result<()> {
         Some(Commands::Start) => start_service()?,
         Some(Commands::Stop) => stop_service()?,
         None => Cli::command().print_help()?,
+        #[cfg(debug_assertions)]
+        Some(Commands::RunTray) => run_tray()?,
     }
 
     if is_terminal {
@@ -115,5 +120,5 @@ fn run() -> color_eyre::Result<()> {
 }
 
 fn run_tray() -> color_eyre::Result<()> {
-    block_on(or(unblock(tray), unblock(run)))
+    block_on(or(unblock(show_system_tray), unblock(run)))
 }
