@@ -7,7 +7,7 @@ use std::{
 };
 
 use log::{error, info};
-use smol::{block_on, future, unblock};
+use smol::{block_on, future::or, unblock};
 use windows_service::{
     Error as WSError, define_windows_service,
     service::{
@@ -19,7 +19,7 @@ use windows_service::{
     service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
-use crate::cli::run_cli;
+use crate::windivert::intercept;
 
 pub const SERVICE_NAME: &str = "PacketmockService";
 const SERVICE_DISPLAY_NAME: &str = "Packetmock Service";
@@ -27,7 +27,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 define_windows_service!(ffi_service_main, service_main);
 
-pub fn handle_if_service() -> color_eyre::Result<()> {
+pub fn handle_service() -> color_eyre::Result<()> {
     let args = args_os().skip(1).take(1).collect::<Vec<_>>();
     if args.first().is_some_and(|arg| arg == "run-service") {
         service_dispatcher::start(SERVICE_NAME, ffi_service_main)?;
@@ -73,16 +73,15 @@ fn run_service() -> color_eyre::Result<()> {
         process_id: None,
     })?;
 
-    block_on(future::or(
-        unblock(move || {
-            match shutdown_rx.recv() {
-                Ok(_) => info!("Shutdown signal received."),
-                Err(e) => error!("Failed to receive shutdown signal: {e:?}"),
-            };
-            Ok(())
-        }),
-        unblock(run_cli),
-    ))?;
+    let shutdown = move || {
+        match shutdown_rx.recv() {
+            Ok(_) => info!("Shutdown signal received."),
+            Err(e) => error!("Failed to receive shutdown signal: {e:?}"),
+        };
+        Ok(())
+    };
+
+    block_on(or(unblock(shutdown), unblock(intercept)))?;
 
     status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
@@ -94,7 +93,7 @@ fn run_service() -> color_eyre::Result<()> {
         process_id: None,
     })?;
 
-    info!("Service has stopped.");
+    info!("Service has stopped");
 
     Ok(())
 }
@@ -173,7 +172,7 @@ pub fn query_service() -> color_eyre::Result<ServiceState> {
     Ok(status.current_state.into())
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ServiceState {
     NotInstalled,
     Stopped,

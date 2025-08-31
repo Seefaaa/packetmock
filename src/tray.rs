@@ -28,7 +28,9 @@ use winapi::{
 };
 use windows::core::{PCWSTR, w};
 
-use crate::service::{install_service, start_service, stop_service, uninstall_service};
+use crate::service::{
+    ServiceState, install_service, query_service, start_service, stop_service, uninstall_service,
+};
 
 use self::{
     menu::{
@@ -136,7 +138,15 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             Err(e) => toast_err("Failed to uninstall service", e),
                         };
                     }
-                    MENU_ID_EXIT => PostQuitMessage(0),
+                    MENU_ID_EXIT => {
+                        let status = query_service().unwrap();
+
+                        if status == ServiceState::Running {
+                            let _ = show_toast("Service is running in background");
+                        }
+
+                        PostQuitMessage(0)
+                    }
                     _ => {}
                 };
             },

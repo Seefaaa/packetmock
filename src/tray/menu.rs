@@ -169,7 +169,7 @@ impl From<&MenuItem> for MENUITEMINFOW {
 impl From<ServiceState> for PCWSTR {
     fn from(state: ServiceState) -> Self {
         match state {
-            ServiceState::NotInstalled => w!("Standalone (Running)"),
+            ServiceState::NotInstalled => w!("Service (Not installed)"),
             ServiceState::Running => w!("Service (Running)"),
             ServiceState::Stopped => w!("Service (Stopped)"),
             ServiceState::StartPending => w!("Service (Starting)"),
