@@ -3,6 +3,7 @@ use std::{
     ptr::null_mut,
 };
 
+use color_eyre::Result;
 use log::error;
 use winapi::{
     shared::windef::{HMENU, HWND},
@@ -37,11 +38,11 @@ const UNINSTALL_SERVICE: MenuItem = MenuItem::new()
 const EXIT: MenuItem = MenuItem::new().text(w!("Exit")).id(MENU_ID_EXIT);
 
 /// Create the popup menu based on the current service state.
-fn create_popup_menu() -> HMENU {
+fn create_popup_menu() -> Result<HMENU> {
     unsafe {
         let menu = CreatePopupMenu();
 
-        let service = query_service().expect("Failed to query service status");
+        let service = query_service()?;
 
         let mut items = Vec::with_capacity(6);
 
@@ -73,14 +74,14 @@ fn create_popup_menu() -> HMENU {
             }
         }
 
-        menu
+        Ok(menu)
     }
 }
 
 /// Show the popup menu and return the selected menu item ID.
-pub fn show_popup_menu(hwnd: HWND) -> i32 {
+pub fn show_popup_menu(hwnd: HWND) -> Result<i32> {
     unsafe {
-        let menu = create_popup_menu();
+        let menu = create_popup_menu()?;
 
         let pos = {
             let mut point = zeroed();
@@ -95,7 +96,7 @@ pub fn show_popup_menu(hwnd: HWND) -> i32 {
 
         DestroyMenu(menu);
 
-        result
+        Ok(result)
     }
 }
 

@@ -73,39 +73,45 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
                 if let Err(e) = match show_popup_menu(hwnd) {
-                    MENU_ID_START_SERVICE => match start_service() {
-                        Ok(_) => toast_ok("Service started"),
-                        Err(e) => toast_err("Failed to start service", e),
-                    },
-                    MENU_ID_STOP_SERVICE => match stop_service() {
-                        Ok(_) => toast_ok("Service stopped"),
-                        Err(e) => toast_err("Failed to stop service", e),
-                    },
-                    MENU_ID_INSTALL_SERVICE => match install_service() {
-                        Ok(_) => toast_ok("Service installed"),
-                        Err(e) => toast_err("Failed to install service", e),
-                    },
-                    MENU_ID_UNINSTALL_SERVICE => match uninstall_service() {
-                        Ok(_) => toast_ok("Service uninstalled"),
-                        Err(e) => toast_err("Failed to uninstall service", e),
-                    },
-                    MENU_ID_EXIT => {
-                        let _ = match query_service() {
-                            Ok(ServiceState::Running) => {
-                                show_toast("Service is running in background")
-                            }
-                            Err(e) => {
-                                error!("Failed to query service status: {e:?}");
-                                Ok(())
-                            }
-                            _ => Ok(()),
-                        };
+                    Ok(id) => match id {
+                        MENU_ID_START_SERVICE => match start_service() {
+                            Ok(_) => toast_ok("Service started"),
+                            Err(e) => toast_err("Failed to start service", e),
+                        },
+                        MENU_ID_STOP_SERVICE => match stop_service() {
+                            Ok(_) => toast_ok("Service stopped"),
+                            Err(e) => toast_err("Failed to stop service", e),
+                        },
+                        MENU_ID_INSTALL_SERVICE => match install_service() {
+                            Ok(_) => toast_ok("Service installed"),
+                            Err(e) => toast_err("Failed to install service", e),
+                        },
+                        MENU_ID_UNINSTALL_SERVICE => match uninstall_service() {
+                            Ok(_) => toast_ok("Service uninstalled"),
+                            Err(e) => toast_err("Failed to uninstall service", e),
+                        },
+                        MENU_ID_EXIT => {
+                            let _ = match query_service() {
+                                Ok(ServiceState::Running) => {
+                                    show_toast("Service is running in background")
+                                }
+                                Err(e) => {
+                                    error!("Failed to query service status: {e:?}");
+                                    Ok(())
+                                }
+                                _ => Ok(()),
+                            };
 
-                        PostQuitMessage(0);
+                            PostQuitMessage(0);
 
+                            Ok(())
+                        }
+                        _ => Ok(()),
+                    },
+                    Err(e) => {
+                        error!("Failed to show popup menu: {e:?}");
                         Ok(())
                     }
-                    _ => Ok(()),
                 } {
                     error!("Failed to handle menu action: {e:?}");
                 }
