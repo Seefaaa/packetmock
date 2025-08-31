@@ -22,15 +22,19 @@ use windows_service::{
 
 use crate::windivert::intercept;
 
+/// Name of the Windows service.
 #[cfg(not(debug_assertions))]
 const SERVICE_NAME: &str = "PacketmockSrv";
 #[cfg(debug_assertions)]
 const SERVICE_NAME: &str = "PacketmockDevSrv";
+/// Display name of the Windows service.
 const SERVICE_DISPLAY_NAME: &str = "Packetmock Service";
+/// Type of the Windows service.
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 define_windows_service!(ffi_service_main, service_main);
 
+/// Run the service if the program was started with the "run-service" argument.
 pub fn handle_service() -> Result<()> {
     let args = args_os().skip(1).take(1).collect::<Vec<_>>();
     if args.first().is_some_and(|arg| arg == "run-service") {
@@ -40,6 +44,7 @@ pub fn handle_service() -> Result<()> {
     Ok(())
 }
 
+/// Entry point for the Windows service.
 fn service_main(_: Vec<OsString>) {
     info!("Service is starting");
     if let Err(e) = run_service() {
@@ -47,6 +52,7 @@ fn service_main(_: Vec<OsString>) {
     }
 }
 
+/// Main logic for running the Windows service.
 fn run_service() -> Result<()> {
     let (shudown_tx, shutdown_rx) = mpsc::channel();
 
@@ -176,6 +182,7 @@ pub fn query_service() -> Result<ServiceState> {
     Ok(status.current_state.into())
 }
 
+/// Represents the state of the Windows service.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ServiceState {
     NotInstalled,
@@ -189,6 +196,7 @@ pub enum ServiceState {
 }
 
 impl From<WSServiceState> for ServiceState {
+    /// Convert a `WSServiceState` from the Windows API into a `ServiceState`.
     fn from(state: WSServiceState) -> Self {
         match state {
             WSServiceState::Stopped => ServiceState::Stopped,

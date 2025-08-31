@@ -18,12 +18,14 @@ use winapi::{
 };
 use windows::core::PCWSTR;
 
+/// A hidden window to receive tray icon events.
 pub struct Window {
     pub hwnd: HWND,
     pub icon: HICON,
 }
 
 impl Window {
+    /// Create a new hidden window with the specified class name, title, and window procedure.
     pub fn new(class: PCWSTR, title: PCWSTR, proc: WNDPROC) -> Result<Pin<Box<Self>>> {
         let instance = unsafe { GetModuleHandleW(null()) };
         let icon = unsafe { LoadIconW(instance, 1 as _) };
@@ -78,6 +80,7 @@ impl Window {
         Ok(window)
     }
 
+    /// Start the window's event loop to process messages.
     pub fn event_loop(&self) {
         unsafe {
             let mut message = zeroed();
@@ -89,6 +92,7 @@ impl Window {
         }
     }
 
+    /// Handle the `WM_NCCREATE` message to associate the window with the `Window` struct.
     pub fn nc_create(hwnd: HWND, lparam: isize) {
         let create_struct = unsafe { *(lparam as *const CREATESTRUCTW) };
         let window = create_struct.lpCreateParams as *mut Self;
@@ -102,6 +106,7 @@ impl Window {
 }
 
 impl From<HWND> for &'_ mut Window {
+    /// Get a mutable reference to the `Window` struct from the window handle.
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn from(value: HWND) -> Self {
         let ptr = unsafe { GetWindowLongPtrW(value, GWLP_USERDATA) } as *mut Window;

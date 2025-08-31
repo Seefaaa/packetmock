@@ -36,6 +36,7 @@ const UNINSTALL_SERVICE: MenuItem = MenuItem::new()
     .id(MENU_ID_UNINSTALL_SERVICE);
 const EXIT: MenuItem = MenuItem::new().text(w!("Exit")).id(MENU_ID_EXIT);
 
+/// Create the popup menu based on the current service state.
 fn create_popup_menu() -> HMENU {
     unsafe {
         let menu = CreatePopupMenu();
@@ -76,6 +77,7 @@ fn create_popup_menu() -> HMENU {
     }
 }
 
+/// Show the popup menu and return the selected menu item ID.
 pub fn show_popup_menu(hwnd: HWND) -> i32 {
     unsafe {
         let menu = create_popup_menu();
@@ -97,6 +99,7 @@ pub fn show_popup_menu(hwnd: HWND) -> i32 {
     }
 }
 
+/// Handy struct to build menu items.
 #[derive(Debug)]
 pub struct MenuItem {
     fmask: u32,
@@ -107,6 +110,7 @@ pub struct MenuItem {
 }
 
 impl MenuItem {
+    /// Create a new empty menu item.
     #[allow(clippy::new_without_default)]
     pub const fn new() -> Self {
         Self {
@@ -118,24 +122,28 @@ impl MenuItem {
         }
     }
 
+    /// Set the text of the menu item.
     pub const fn text(mut self, text: PCWSTR) -> Self {
         self.fmask |= MIIM_STRING;
         self.type_data = Some(text);
         self
     }
 
+    /// Set the ID of the menu item.
     pub const fn id(mut self, id: i32) -> Self {
         self.fmask |= MIIM_ID;
         self.wid = id as _;
         self
     }
 
+    /// Set the menu item to be bold. (there can be only one bold item)
     pub const fn bold(mut self) -> Self {
         self.fmask |= MIIM_STATE;
         self.fstate = MFS_DEFAULT;
         self
     }
 
+    /// Create a seperator menu item.
     pub const fn seperator() -> Self {
         Self {
             fmask: MIIM_TYPE,
@@ -148,6 +156,7 @@ impl MenuItem {
 }
 
 impl From<&MenuItem> for MENUITEMINFOW {
+    /// Convert a `MenuItem` into a `MENUITEMINFOW` for use with WinAPI functions.
     fn from(item: &MenuItem) -> Self {
         MENUITEMINFOW {
             cbSize: size_of::<MENUITEMINFOW>() as u32,
@@ -167,6 +176,7 @@ impl From<&MenuItem> for MENUITEMINFOW {
 }
 
 impl From<ServiceState> for PCWSTR {
+    /// Convert a `ServiceState` into a display string for the menu item.
     fn from(state: ServiceState) -> Self {
         match state {
             ServiceState::NotInstalled => w!("Service (Not installed)"),
@@ -182,6 +192,7 @@ impl From<ServiceState> for PCWSTR {
 }
 
 impl From<ServiceState> for MenuItem {
+    /// Convert a `ServiceState` into a bold `MenuItem` for display.
     fn from(value: ServiceState) -> Self {
         MenuItem::new().text(value.into()).bold()
     }

@@ -7,10 +7,14 @@ use color_eyre::Result;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType};
 use windows_registry::LOCAL_MACHINE;
 
+/// Display name for the toast notification.
 const TOAST_DISPLAY_NAME: &str = "Packetmock";
+/// Application ID for the toast notification.
 const TOAST_APPID: &str = "Seefaaa.Packetmock";
+/// Icon of the toast notification.
 const TOAST_ICON: &[u8] = include_bytes!("../../resources/pink48.png");
 
+/// Show a Windows toast notification with the specified message.
 pub fn show_toast(message: &str) -> Result<()> {
     let temp = temp_dir().join(TOAST_APPID);
     let icon_path = temp.join("toast.png");
