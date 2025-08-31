@@ -7,7 +7,8 @@ use std::{
     ptr::{null, null_mut},
 };
 
-use log::info;
+use color_eyre::eyre::Report;
+use log::{error, info};
 use winapi::{
     shared::{
         guiddef::GUID,
@@ -26,6 +27,8 @@ use winapi::{
     },
 };
 use windows::core::{PCWSTR, w};
+
+use crate::service::{install_service, start_service, stop_service, uninstall_service};
 
 use self::{
     menu::{
@@ -109,10 +112,30 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
                 match show_popup_menu(hwnd) {
-                    MENU_ID_START_SERVICE => {}
-                    MENU_ID_STOP_SERVICE => {}
-                    MENU_ID_INSTALL_SERVICE => {}
-                    MENU_ID_UNINSTALL_SERVICE => {}
+                    MENU_ID_START_SERVICE => {
+                        let _ = match start_service() {
+                            Ok(_) => toast_ok("Service started"),
+                            Err(e) => toast_err("Failed to start service", e),
+                        };
+                    }
+                    MENU_ID_STOP_SERVICE => {
+                        let _ = match stop_service() {
+                            Ok(_) => toast_ok("Service stopped"),
+                            Err(e) => toast_err("Failed to stop service", e),
+                        };
+                    }
+                    MENU_ID_INSTALL_SERVICE => {
+                        let _ = match install_service() {
+                            Ok(_) => toast_ok("Service installed"),
+                            Err(e) => toast_err("Failed to install service", e),
+                        };
+                    }
+                    MENU_ID_UNINSTALL_SERVICE => {
+                        let _ = match uninstall_service() {
+                            Ok(_) => toast_ok("Service uninstalled"),
+                            Err(e) => toast_err("Failed to uninstall service", e),
+                        };
+                    }
                     MENU_ID_EXIT => PostQuitMessage(0),
                     _ => {}
                 };
@@ -123,4 +146,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
     };
 
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+}
+
+fn toast_ok(msg: &str) -> color_eyre::Result<()> {
+    info!("{msg}");
+    show_toast(msg)?;
+    Ok(())
+}
+
+fn toast_err(msg: &str, e: Report) -> color_eyre::Result<()> {
+    error!("{e:?}");
+    show_toast(&format!("{msg}: {e}"))?;
+    Ok(())
 }

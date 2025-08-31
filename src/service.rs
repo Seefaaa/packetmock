@@ -1,19 +1,18 @@
 use std::{
     env::{args_os, current_exe},
     ffi::OsString,
-    process::{Command, exit},
+    process::exit,
     sync::mpsc,
     time::Duration,
 };
 
-use color_eyre::owo_colors::OwoColorize;
 use log::{error, info};
 use smol::{block_on, future, unblock};
 use windows_service::{
-    define_windows_service,
+    Error as WSError, define_windows_service,
     service::{
-        self, ServiceAccess, ServiceControl, ServiceControlAccept, ServiceExitCode, ServiceStatus,
-        ServiceType,
+        ServiceAccess, ServiceControl, ServiceControlAccept, ServiceErrorControl, ServiceExitCode,
+        ServiceInfo, ServiceStartType, ServiceState as WSServiceState, ServiceStatus, ServiceType,
     },
     service_control_handler::{self, ServiceControlHandlerResult},
     service_dispatcher,
@@ -38,9 +37,9 @@ pub fn handle_if_service() -> color_eyre::Result<()> {
 }
 
 fn service_main(_: Vec<OsString>) {
-    info!("Service is starting...");
+    info!("Service is starting");
     if let Err(e) = run_service() {
-        error!("Service encountered an error: {e}");
+        error!("Service encountered an error: {e:?}");
     }
 }
 
@@ -50,9 +49,9 @@ fn run_service() -> color_eyre::Result<()> {
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
         match control_event {
             ServiceControl::Stop => {
-                info!("Sending shutdown signal to service...");
+                info!("Sending shutdown signal to service");
                 if let Err(e) = shudown_tx.send(()) {
-                    error!("Failed to send shutdown signal: {e}");
+                    error!("Failed to send shutdown signal: {e:?}");
                     return ServiceControlHandlerResult::NotImplemented;
                 }
                 ServiceControlHandlerResult::NoError
@@ -66,7 +65,7 @@ fn run_service() -> color_eyre::Result<()> {
 
     status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
-        current_state: service::ServiceState::Running,
+        current_state: WSServiceState::Running,
         controls_accepted: ServiceControlAccept::STOP,
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
@@ -78,7 +77,7 @@ fn run_service() -> color_eyre::Result<()> {
         unblock(move || {
             match shutdown_rx.recv() {
                 Ok(_) => info!("Shutdown signal received."),
-                Err(e) => error!("Failed to receive shutdown signal: {e}"),
+                Err(e) => error!("Failed to receive shutdown signal: {e:?}"),
             };
             Ok(())
         }),
@@ -87,7 +86,7 @@ fn run_service() -> color_eyre::Result<()> {
 
     status_handle.set_service_status(ServiceStatus {
         service_type: SERVICE_TYPE,
-        current_state: service::ServiceState::Stopped,
+        current_state: WSServiceState::Stopped,
         controls_accepted: ServiceControlAccept::empty(),
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
@@ -100,96 +99,69 @@ fn run_service() -> color_eyre::Result<()> {
     Ok(())
 }
 
-// i could have used the windows-service crate to do these (👇) but
-// this was easier and less code to write
-
 /// Installs the exe as a Windows service
 pub fn install_service() -> color_eyre::Result<()> {
-    let output = Command::new("sc")
-        .args([
-            "create",
-            SERVICE_NAME,
-            "start=",
-            "auto",
-            "binPath=",
-            &format!("\"{}\" run-service", current_exe()?.display()),
-            "DisplayName=",
-            SERVICE_DISPLAY_NAME,
-        ])
-        .output()?;
+    let manager = ServiceManager::local_computer(
+        None::<&str>,
+        ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
+    )?;
 
-    if output.status.success() {
-        println!("{}", "Service installed successfully!".bright_green());
-    } else {
-        eprintln!(
-            "{} {}",
-            "Failed to install service:".bright_red(),
-            String::from_utf8_lossy(&output.stdout).bright_red()
-        );
-    }
+    let service_info = ServiceInfo {
+        name: OsString::from(SERVICE_NAME),
+        display_name: OsString::from(SERVICE_DISPLAY_NAME),
+        service_type: SERVICE_TYPE,
+        start_type: ServiceStartType::AutoStart,
+        error_control: ServiceErrorControl::Normal,
+        executable_path: current_exe()?,
+        launch_arguments: vec!["run-service".into()],
+        dependencies: vec![],
+        account_name: None,
+        account_password: None,
+    };
+
+    let service = manager.create_service(&service_info, ServiceAccess::CHANGE_CONFIG)?;
+    service.set_description(env!("CARGO_PKG_DESCRIPTION"))?;
 
     Ok(())
 }
 
 /// Uninstalls the Windows service
 pub fn uninstall_service() -> color_eyre::Result<()> {
-    let output = Command::new("sc").args(["delete", SERVICE_NAME]).output()?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    let service = manager.open_service(SERVICE_NAME, ServiceAccess::DELETE)?;
 
-    if output.status.success() {
-        println!("{}", "Service uninstalled successfully!".bright_green());
-    } else {
-        eprintln!(
-            "{} {}",
-            "Failed to uninstall service:".bright_red(),
-            String::from_utf8_lossy(&output.stdout).bright_red()
-        );
-    }
+    service.delete()?;
 
     Ok(())
 }
 
 /// Starts the Windows service
 pub fn start_service() -> color_eyre::Result<()> {
-    let output = Command::new("sc").args(["start", SERVICE_NAME]).output()?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    let service = manager.open_service(SERVICE_NAME, ServiceAccess::START)?;
 
-    if output.status.success() {
-        println!("{}", "Service started successfully!".bright_green());
-    } else {
-        eprintln!(
-            "{} {}",
-            "Failed to start service:".bright_red(),
-            String::from_utf8_lossy(&output.stdout).bright_red()
-        );
-    }
+    service.start::<&str>(&[])?;
 
     Ok(())
 }
 
 /// Stops the Windows service
 pub fn stop_service() -> color_eyre::Result<()> {
-    let output = Command::new("sc").args(["stop", SERVICE_NAME]).output()?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    let service = manager.open_service(SERVICE_NAME, ServiceAccess::STOP)?;
 
-    if output.status.success() {
-        println!("{}", "Service stopped successfully!".bright_green());
-    } else {
-        eprintln!(
-            "{} {}",
-            "Failed to stop service:".bright_red(),
-            String::from_utf8_lossy(&output.stdout).bright_red()
-        );
-    }
+    service.stop()?;
 
     Ok(())
 }
 
 pub fn query_service() -> color_eyre::Result<ServiceState> {
-    let service_manager =
-        ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
 
-    let service = match service_manager.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS) {
+    let service = match manager.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS) {
         Ok(s) => s,
         Err(e) => match e {
-            windows_service::Error::Winapi(e) if e.raw_os_error() == Some(1060) => {
+            WSError::Winapi(e) if e.raw_os_error() == Some(1060) => {
                 return Ok(ServiceState::NotInstalled);
             }
             _ => return Err(e.into()),
@@ -197,8 +169,6 @@ pub fn query_service() -> color_eyre::Result<ServiceState> {
     };
 
     let status = service.query_status()?;
-
-    log::debug!("Service status: {status:?}");
 
     Ok(status.current_state.into())
 }
@@ -215,16 +185,16 @@ pub enum ServiceState {
     Paused,
 }
 
-impl From<service::ServiceState> for ServiceState {
-    fn from(state: service::ServiceState) -> Self {
+impl From<WSServiceState> for ServiceState {
+    fn from(state: WSServiceState) -> Self {
         match state {
-            service::ServiceState::Stopped => ServiceState::Stopped,
-            service::ServiceState::StartPending => ServiceState::StartPending,
-            service::ServiceState::StopPending => ServiceState::StopPending,
-            service::ServiceState::Running => ServiceState::Running,
-            service::ServiceState::ContinuePending => ServiceState::ContinuePending,
-            service::ServiceState::PausePending => ServiceState::PausePending,
-            service::ServiceState::Paused => ServiceState::Paused,
+            WSServiceState::Stopped => ServiceState::Stopped,
+            WSServiceState::StartPending => ServiceState::StartPending,
+            WSServiceState::StopPending => ServiceState::StopPending,
+            WSServiceState::Running => ServiceState::Running,
+            WSServiceState::ContinuePending => ServiceState::ContinuePending,
+            WSServiceState::PausePending => ServiceState::PausePending,
+            WSServiceState::Paused => ServiceState::Paused,
         }
     }
 }

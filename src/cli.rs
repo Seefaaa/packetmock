@@ -5,7 +5,10 @@ use log::{error, info};
 use smol::{block_on, future::or, unblock};
 
 use crate::{
-    service::{install_service, start_service, stop_service, uninstall_service},
+    service::{
+        ServiceState, install_service, query_service, start_service, stop_service,
+        uninstall_service,
+    },
     tray::show_tray_icon,
     windivert::intercept,
 };
@@ -63,18 +66,22 @@ pub fn run_cli() -> color_eyre::Result<()> {
         sx.send(()).expect("Could not send terminate signal");
     })?;
 
-    block_on(or(
-        unblock(move || {
-            match rx.recv() {
-                Ok(_) => info!("Terminate signal received."),
-                Err(e) => error!("Failed to receive terminate signal: {e}"),
-            };
-            Ok(())
-        }),
-        unblock(intercept),
-    ))
+    let recv = move || {
+        match rx.recv() {
+            Ok(_) => info!("Terminate signal received."),
+            Err(e) => error!("Failed to receive terminate signal: {e}"),
+        };
+        Ok(())
+    };
+
+    block_on(or(unblock(recv), unblock(intercept)))
 }
 
 fn run_tray() -> color_eyre::Result<()> {
-    block_on(or(unblock(show_tray_icon), unblock(run_cli)))
+    let service = query_service()?;
+
+    match service {
+        ServiceState::NotInstalled => block_on(or(unblock(show_tray_icon), unblock(run_cli))),
+        _ => show_tray_icon(),
+    }
 }
