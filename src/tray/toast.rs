@@ -3,6 +3,7 @@ use std::{
     fs::{create_dir_all, write},
 };
 
+use color_eyre::Result;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType};
 use windows_registry::LOCAL_MACHINE;
 
@@ -10,7 +11,7 @@ const TOAST_DISPLAY_NAME: &str = "Packetmock";
 const TOAST_APPID: &str = "Seefaaa.Packetmock";
 const TOAST_ICON: &[u8] = include_bytes!("../../resources/pink48.png");
 
-pub fn show_toast(message: &str) -> color_eyre::Result<()> {
+pub fn show_toast(message: &str) -> Result<()> {
     let temp = temp_dir().join(TOAST_APPID);
     let icon_path = temp.join("toast.png");
 

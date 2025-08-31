@@ -1,6 +1,9 @@
 use std::{borrow::Cow, cmp::Ordering, ffi::CString, mem::zeroed, ptr::null_mut, slice};
 
-use color_eyre::eyre::{ContextCompat, bail};
+use color_eyre::{
+    Result,
+    eyre::{ContextCompat, bail},
+};
 use const_format::formatcp as const_format;
 use log::info;
 use winapi::um::{errhandlingapi::GetLastError, handleapi::INVALID_HANDLE_VALUE};
@@ -37,7 +40,7 @@ impl WinDivert {
     ///
     /// The filter syntax is documented at
     /// <https://reqrypt.org/windivert-doc.html#filter_language>.
-    pub fn open(filter: &str) -> color_eyre::Result<Self> {
+    pub fn open(filter: &str) -> Result<Self> {
         let filter_cstr = CString::new(filter)?;
 
         let handle = unsafe {
@@ -64,7 +67,7 @@ impl WinDivert {
         &self,
         buffer: &'b mut [u8],
         addr: &'b mut WINDIVERT_ADDRESS,
-    ) -> color_eyre::Result<Packet<'a>> {
+    ) -> Result<Packet<'a>> {
         let mut recv_len = 0;
 
         let result = unsafe {
@@ -88,7 +91,7 @@ impl WinDivert {
     }
 
     /// Send a packet to the WinDivert handle.
-    pub fn send(&self, mut packet: Packet<'_>) -> color_eyre::Result<()> {
+    pub fn send(&self, mut packet: Packet<'_>) -> Result<()> {
         if packet.recalc_checksums {
             packet.calc_checksums()?;
         }
@@ -127,10 +130,7 @@ pub struct Packet<'a> {
 
 impl<'a> Packet<'a> {
     /// Create a new `Packet` from raw packet data and address.
-    pub fn new<'b: 'a>(
-        raw: Cow<'b, [u8]>,
-        addr: Cow<'b, WINDIVERT_ADDRESS>,
-    ) -> color_eyre::Result<Self> {
+    pub fn new<'b: 'a>(raw: Cow<'b, [u8]>, addr: Cow<'b, WINDIVERT_ADDRESS>) -> Result<Self> {
         let mut ip_header = null_mut();
         let mut tcp_header = null_mut();
         let mut data = null_mut();
@@ -172,7 +172,7 @@ impl<'a> Packet<'a> {
 
     /// Re-parse the raw packet data to update internal pointers.
     /// This is necessary if the raw data has been modified or reallocated.
-    fn reparse(&mut self) -> color_eyre::Result<()> {
+    fn reparse(&mut self) -> Result<()> {
         let mut ip_header = null_mut();
         let mut tcp_header = null_mut();
         let mut data = null_mut();
@@ -266,7 +266,7 @@ impl<'a> Packet<'a> {
 
     /// Recalculate the checksums for the packet.
     /// This should be called after modifying the packet data or headers.
-    fn calc_checksums(&mut self) -> color_eyre::Result<()> {
+    fn calc_checksums(&mut self) -> Result<()> {
         let result = unsafe {
             WinDivertHelperCalcChecksums(
                 self.raw.to_mut().as_mut_ptr() as _,
@@ -286,7 +286,7 @@ impl<'a> Packet<'a> {
 
     /// Set the packet data, resizing the raw packet if necessary.
     /// This will also update the IP header length field accordingly.
-    pub fn set_data(&mut self, data: &[u8]) -> color_eyre::Result<()> {
+    pub fn set_data(&mut self, data: &[u8]) -> Result<()> {
         let ordering = self
             .data()
             .map(|packet_data| packet_data.len().cmp(&data.len()))
@@ -326,7 +326,7 @@ impl<'a> Packet<'a> {
     }
 
     /// Create a deep copy of the packet, allocating new memory for the raw data and address.
-    pub fn try_clone(&self) -> color_eyre::Result<Self> {
+    pub fn try_clone(&self) -> Result<Self> {
         let raw = Cow::Owned(self.raw.clone().into_owned());
         let addr = Cow::Owned(self.addr.clone().into_owned());
 
@@ -335,7 +335,7 @@ impl<'a> Packet<'a> {
 }
 
 /// Start intercepting packets and modifying them as necessary.
-pub fn intercept() -> color_eyre::Result<()> {
+pub fn intercept() -> Result<()> {
     let windivert = WinDivert::open(WINDIVERT_FILTER)?;
 
     let mut buffer = [0; BUFFER_SIZE];

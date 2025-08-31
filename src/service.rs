@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use color_eyre::Result;
 use log::{error, info};
 use smol::{block_on, future::or, unblock};
 use windows_service::{
@@ -30,7 +31,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 define_windows_service!(ffi_service_main, service_main);
 
-pub fn handle_service() -> color_eyre::Result<()> {
+pub fn handle_service() -> Result<()> {
     let args = args_os().skip(1).take(1).collect::<Vec<_>>();
     if args.first().is_some_and(|arg| arg == "run-service") {
         service_dispatcher::start(SERVICE_NAME, ffi_service_main)?;
@@ -46,7 +47,7 @@ fn service_main(_: Vec<OsString>) {
     }
 }
 
-fn run_service() -> color_eyre::Result<()> {
+fn run_service() -> Result<()> {
     let (shudown_tx, shutdown_rx) = mpsc::channel();
 
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
@@ -102,7 +103,7 @@ fn run_service() -> color_eyre::Result<()> {
 }
 
 /// Installs the exe as a Windows service
-pub fn install_service() -> color_eyre::Result<()> {
+pub fn install_service() -> Result<()> {
     let manager = ServiceManager::local_computer(
         None::<&str>,
         ServiceManagerAccess::CONNECT | ServiceManagerAccess::CREATE_SERVICE,
@@ -128,7 +129,7 @@ pub fn install_service() -> color_eyre::Result<()> {
 }
 
 /// Uninstalls the Windows service
-pub fn uninstall_service() -> color_eyre::Result<()> {
+pub fn uninstall_service() -> Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
     let service = manager.open_service(SERVICE_NAME, ServiceAccess::DELETE)?;
 
@@ -138,7 +139,7 @@ pub fn uninstall_service() -> color_eyre::Result<()> {
 }
 
 /// Starts the Windows service
-pub fn start_service() -> color_eyre::Result<()> {
+pub fn start_service() -> Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
     let service = manager.open_service(SERVICE_NAME, ServiceAccess::START)?;
 
@@ -148,7 +149,7 @@ pub fn start_service() -> color_eyre::Result<()> {
 }
 
 /// Stops the Windows service
-pub fn stop_service() -> color_eyre::Result<()> {
+pub fn stop_service() -> Result<()> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
     let service = manager.open_service(SERVICE_NAME, ServiceAccess::STOP)?;
 
@@ -157,7 +158,7 @@ pub fn stop_service() -> color_eyre::Result<()> {
     Ok(())
 }
 
-pub fn query_service() -> color_eyre::Result<ServiceState> {
+pub fn query_service() -> Result<ServiceState> {
     let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)?;
 
     let service = match manager.open_service(SERVICE_NAME, ServiceAccess::QUERY_STATUS) {

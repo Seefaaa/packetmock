@@ -8,7 +8,7 @@ mod windivert;
 
 use std::sync::mpsc;
 
-use color_eyre::config::HookBuilder;
+use color_eyre::{Result, config::HookBuilder};
 use env_logger::Env;
 use log::{error, info};
 use smol::{block_on, future::or, unblock};
@@ -19,7 +19,7 @@ use crate::{service::handle_service, tray::run_tray};
 const TTL: u8 = 4;
 
 /// Main entry point for the application.
-fn main() -> color_eyre::Result<()> {
+fn main() -> Result<()> {
     let is_terminal = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0;
 
     init_logger();
@@ -37,7 +37,7 @@ fn main() -> color_eyre::Result<()> {
 }
 
 /// Set up a Ctrl-C handler to gracefully handle termination signals.
-fn ctrlc_handler() -> color_eyre::Result<impl FnOnce() -> color_eyre::Result<()>> {
+fn ctrlc_handler() -> Result<impl FnOnce() -> Result<()>> {
     let (sx, rx) = mpsc::channel();
 
     ctrlc::set_handler(move || {
@@ -59,7 +59,7 @@ fn init_logger() {
 }
 
 /// Initialize the color_eyre error reporting library.
-fn init_color_eyre() -> color_eyre::Result<()> {
+fn init_color_eyre() -> Result<()> {
     #[allow(unused_mut)]
     let mut hook = HookBuilder::default();
 

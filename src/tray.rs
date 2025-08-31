@@ -7,7 +7,7 @@ use std::{
     ptr::null_mut,
 };
 
-use color_eyre::eyre::Report;
+use color_eyre::{Result, eyre::Report};
 use log::{error, info};
 use winapi::{
     shared::{guiddef::GUID, windef::HWND},
@@ -46,7 +46,7 @@ const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
-pub fn run_tray() -> color_eyre::Result<()> {
+pub fn run_tray() -> Result<()> {
     info!("Creating tray");
 
     let window = Window::new(WINDOW_CLASS, WINDOW_TITLE, Some(wnd_proc))?;
@@ -119,14 +119,14 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
 }
 
 /// Show a toast notification for a successful operation.
-fn toast_ok(msg: &str) -> color_eyre::Result<()> {
+fn toast_ok(msg: &str) -> Result<()> {
     info!("{msg}");
     show_toast(msg)?;
     Ok(())
 }
 
 /// Show a toast notification for an error.
-fn toast_err(msg: &str, e: Report) -> color_eyre::Result<()> {
+fn toast_err(msg: &str, e: Report) -> Result<()> {
     error!("{e:?}");
     show_toast(&format!("{msg}: {e}"))?;
     Ok(())

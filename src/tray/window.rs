@@ -4,7 +4,7 @@ use std::{
     ptr::{null, null_mut},
 };
 
-use color_eyre::eyre::bail;
+use color_eyre::{Result, eyre::bail};
 use winapi::{
     shared::windef::{HICON, HWND},
     um::{
@@ -24,7 +24,7 @@ pub struct Window {
 }
 
 impl Window {
-    pub fn new(class: PCWSTR, title: PCWSTR, proc: WNDPROC) -> color_eyre::Result<Pin<Box<Self>>> {
+    pub fn new(class: PCWSTR, title: PCWSTR, proc: WNDPROC) -> Result<Pin<Box<Self>>> {
         let instance = unsafe { GetModuleHandleW(null()) };
         let icon = unsafe { LoadIconW(instance, 1 as _) };
 
