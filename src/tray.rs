@@ -17,8 +17,9 @@ use winapi::{
     um::{
         libloaderapi::GetModuleHandleW,
         shellapi::{
-            NIF_GUID, NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_SETVERSION,
-            NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONDATAW_u, Shell_NotifyIconW,
+            NIF_GUID, NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE,
+            NIM_SETVERSION, NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONDATAW_u,
+            Shell_NotifyIconW,
         },
         winuser::{
             DefWindowProcW, LoadIconW, PostQuitMessage, WM_APP, WM_DESTROY, WM_LBUTTONUP,
@@ -56,10 +57,12 @@ pub fn show_tray_icon() -> color_eyre::Result<()> {
     let icon = unsafe { LoadIconW(instance, 1 as _) };
     let window = Window::new(instance, WINDOW_CLASS, WINDOW_NAME, icon, Some(wnd_proc))?;
 
-    create_tray_icon(window, icon);
+    let mut tray_icon = create_tray_icon(window, icon);
     show_toast("Running in system tray")?;
 
     window.event_loop();
+
+    unsafe { Shell_NotifyIconW(NIM_DELETE, &mut tray_icon) };
 
     info!("Tray exited");
 
@@ -68,7 +71,7 @@ pub fn show_tray_icon() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn create_tray_icon(window: &Window, icon: HICON) {
+fn create_tray_icon(window: &Window, icon: HICON) -> NOTIFYICONDATAW {
     let mut notify_icon = NOTIFYICONDATAW {
         cbSize: size_of::<NOTIFYICONDATAW>() as _,
         hWnd: window.hwnd,
@@ -104,6 +107,8 @@ fn create_tray_icon(window: &Window, icon: HICON) {
         Shell_NotifyIconW(NIM_ADD, &mut notify_icon);
         Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
     }
+
+    notify_icon
 }
 
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
