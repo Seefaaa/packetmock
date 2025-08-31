@@ -372,6 +372,7 @@ pub fn intercept() -> color_eyre::Result<()> {
             }
             Err(e) => {
                 bail!("Failed to receive packet: {e:?}");
+                // e.wrap_err(msg)
             }
         }
     }

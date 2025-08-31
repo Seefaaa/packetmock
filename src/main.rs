@@ -13,7 +13,7 @@ use log::{error, info};
 use smol::{block_on, future::or, unblock};
 use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 
-use crate::{service::handle_service, tray::show_tray_icon};
+use crate::{service::handle_service, tray::run_tray};
 
 const TTL: u8 = 4;
 
@@ -40,7 +40,7 @@ fn main() -> color_eyre::Result<()> {
         Ok(())
     };
 
-    block_on(or(unblock(recv), unblock(show_tray_icon)))?;
+    block_on(or(unblock(recv), unblock(run_tray)))?;
 
     if is_terminal {
         unsafe { FreeConsole() };

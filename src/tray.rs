@@ -4,26 +4,22 @@ mod window;
 
 use std::{
     mem::{size_of, zeroed},
-    ptr::{null, null_mut},
+    ptr::null_mut,
 };
 
 use color_eyre::eyre::Report;
 use log::{error, info};
 use winapi::{
-    shared::{
-        guiddef::GUID,
-        windef::{HICON, HWND},
-    },
+    shared::{guiddef::GUID, windef::HWND},
     um::{
-        libloaderapi::GetModuleHandleW,
         shellapi::{
             NIF_GUID, NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE,
             NIM_SETVERSION, NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONDATAW_u,
             Shell_NotifyIconW,
         },
         winuser::{
-            DefWindowProcW, LoadIconW, PostQuitMessage, WM_APP, WM_DESTROY, WM_LBUTTONUP,
-            WM_NCCREATE, WM_RBUTTONUP,
+            DefWindowProcW, PostQuitMessage, WM_APP, WM_DESTROY, WM_LBUTTONUP, WM_NCCREATE,
+            WM_RBUTTONUP,
         },
     },
 };
@@ -42,75 +38,33 @@ use self::{
     window::Window,
 };
 
-const WINDOW_NAME: PCWSTR = w!("Packetmock");
+/// Title and class name for the hidden window.
+const WINDOW_TITLE: PCWSTR = w!("Packetmock");
 const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 
-const TRAY_TOOLTIP: PCWSTR = WINDOW_NAME;
-
+/// Windows message ID for tray icon callbacks.
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
-pub fn show_tray_icon() -> color_eyre::Result<()> {
+pub fn run_tray() -> color_eyre::Result<()> {
     info!("Creating tray");
 
-    let instance = unsafe { GetModuleHandleW(null()) };
-    let icon = unsafe { LoadIconW(instance, 1 as _) };
-    let window = Window::new(instance, WINDOW_CLASS, WINDOW_NAME, icon, Some(wnd_proc))?;
+    let window = Window::new(WINDOW_CLASS, WINDOW_TITLE, Some(wnd_proc))?;
+    let tray_icon = TrayIcon::new(&window);
 
-    let mut tray_icon = create_tray_icon(window, icon);
     show_toast("Running in system tray")?;
 
     window.event_loop();
 
-    unsafe { Shell_NotifyIconW(NIM_DELETE, &mut tray_icon) };
-
     info!("Tray exited");
 
-    Window::drop(window);
+    drop(tray_icon);
+    drop(window);
 
     Ok(())
 }
 
-fn create_tray_icon(window: &Window, icon: HICON) -> NOTIFYICONDATAW {
-    let mut notify_icon = NOTIFYICONDATAW {
-        cbSize: size_of::<NOTIFYICONDATAW>() as _,
-        hWnd: window.hwnd,
-        uID: 0,
-        uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID | NIF_SHOWTIP,
-        uCallbackMessage: WMAPP_NOTIFYCALLBACK,
-        hIcon: icon,
-        szTip: {
-            let mut tip = [0; 128];
-            unsafe { tip[..TRAY_TOOLTIP.len()].copy_from_slice(TRAY_TOOLTIP.as_wide()) };
-            tip
-        },
-        dwState: 0,
-        dwStateMask: 0,
-        szInfo: [0; 256],
-        u: unsafe {
-            let mut u: NOTIFYICONDATAW_u = zeroed();
-            *u.uVersion_mut() = NOTIFYICON_VERSION_4;
-            u
-        },
-        szInfoTitle: [0; 64],
-        dwInfoFlags: 0,
-        guidItem: GUID {
-            Data1: 0x71df8b00,
-            Data2: 0xe359,
-            Data3: 0x4cf3,
-            Data4: [0xb1, 0x7b, 0x57, 0x62, 0xae, 0xd8, 0x44, 0x14],
-        },
-        hBalloonIcon: null_mut(),
-    };
-
-    unsafe {
-        Shell_NotifyIconW(NIM_ADD, &mut notify_icon);
-        Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
-    }
-
-    notify_icon
-}
-
+/// Window procedure to handle window messages.
 unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: isize) -> isize {
     match msg {
         WM_NCCREATE => Window::nc_create(hwnd, lparam),
@@ -118,42 +72,43 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
         WMAPP_NOTIFYCALLBACK => match lparam as u32 {
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
-                match show_popup_menu(hwnd) {
-                    MENU_ID_START_SERVICE => {
-                        let _ = match start_service() {
-                            Ok(_) => toast_ok("Service started"),
-                            Err(e) => toast_err("Failed to start service", e),
-                        };
-                    }
-                    MENU_ID_STOP_SERVICE => {
-                        let _ = match stop_service() {
-                            Ok(_) => toast_ok("Service stopped"),
-                            Err(e) => toast_err("Failed to stop service", e),
-                        };
-                    }
-                    MENU_ID_INSTALL_SERVICE => {
-                        let _ = match install_service() {
-                            Ok(_) => toast_ok("Service installed"),
-                            Err(e) => toast_err("Failed to install service", e),
-                        };
-                    }
-                    MENU_ID_UNINSTALL_SERVICE => {
-                        let _ = match uninstall_service() {
-                            Ok(_) => toast_ok("Service uninstalled"),
-                            Err(e) => toast_err("Failed to uninstall service", e),
-                        };
-                    }
+                if let Err(e) = match show_popup_menu(hwnd) {
+                    MENU_ID_START_SERVICE => match start_service() {
+                        Ok(_) => toast_ok("Service started"),
+                        Err(e) => toast_err("Failed to start service", e),
+                    },
+                    MENU_ID_STOP_SERVICE => match stop_service() {
+                        Ok(_) => toast_ok("Service stopped"),
+                        Err(e) => toast_err("Failed to stop service", e),
+                    },
+                    MENU_ID_INSTALL_SERVICE => match install_service() {
+                        Ok(_) => toast_ok("Service installed"),
+                        Err(e) => toast_err("Failed to install service", e),
+                    },
+                    MENU_ID_UNINSTALL_SERVICE => match uninstall_service() {
+                        Ok(_) => toast_ok("Service uninstalled"),
+                        Err(e) => toast_err("Failed to uninstall service", e),
+                    },
                     MENU_ID_EXIT => {
-                        let status = query_service().unwrap();
+                        let _ = match query_service() {
+                            Ok(ServiceState::Running) => {
+                                show_toast("Service is running in background")
+                            }
+                            Err(e) => {
+                                error!("Failed to query service status: {e:?}");
+                                Ok(())
+                            }
+                            _ => Ok(()),
+                        };
 
-                        if status == ServiceState::Running {
-                            let _ = show_toast("Service is running in background");
-                        }
+                        PostQuitMessage(0);
 
-                        PostQuitMessage(0)
+                        Ok(())
                     }
-                    _ => {}
-                };
+                    _ => Ok(()),
+                } {
+                    error!("Failed to handle menu action: {e:?}");
+                }
             },
             _ => {}
         },
@@ -163,14 +118,75 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
     unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
 }
 
+/// Show a toast notification for a successful operation.
 fn toast_ok(msg: &str) -> color_eyre::Result<()> {
     info!("{msg}");
     show_toast(msg)?;
     Ok(())
 }
 
+/// Show a toast notification for an error.
 fn toast_err(msg: &str, e: Report) -> color_eyre::Result<()> {
     error!("{e:?}");
     show_toast(&format!("{msg}: {e}"))?;
     Ok(())
+}
+
+/// Represents the tray icon in the system tray.
+struct TrayIcon {
+    notify_icon: NOTIFYICONDATAW,
+}
+
+impl TrayIcon {
+    /// Create a new tray icon associated with the given window.
+    fn new(window: &Window) -> Self {
+        let mut notify_icon = NOTIFYICONDATAW {
+            cbSize: size_of::<NOTIFYICONDATAW>() as _,
+            hWnd: window.hwnd,
+            uID: 0,
+            uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP | NIF_GUID | NIF_SHOWTIP,
+            uCallbackMessage: WMAPP_NOTIFYCALLBACK,
+            hIcon: window.icon,
+            szTip: {
+                let mut tip = [0; 128];
+                unsafe { tip[..WINDOW_TITLE.len()].copy_from_slice(WINDOW_TITLE.as_wide()) };
+                tip
+            },
+            dwState: 0,
+            dwStateMask: 0,
+            szInfo: [0; 256],
+            u: unsafe {
+                let mut u: NOTIFYICONDATAW_u = zeroed();
+                *u.uVersion_mut() = NOTIFYICON_VERSION_4;
+                u
+            },
+            szInfoTitle: [0; 64],
+            dwInfoFlags: 0,
+            guidItem: GUID {
+                Data1: 0x71df8b00,
+                Data2: 0xe359,
+                Data3: 0x4cf3,
+                Data4: [0xb1, 0x7b, 0x57, 0x62, 0xae, 0xd8, 0x44, 0x14],
+            },
+            hBalloonIcon: null_mut(),
+        };
+
+        unsafe {
+            Shell_NotifyIconW(NIM_ADD, &mut notify_icon);
+            Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
+        }
+
+        Self { notify_icon }
+    }
+}
+
+impl Drop for TrayIcon {
+    /// Remove the tray icon when the `TrayIcon` is dropped.
+    fn drop(&mut self) {
+        unsafe {
+            if Shell_NotifyIconW(NIM_DELETE, &mut self.notify_icon) == 0 {
+                error!("Failed to delete tray icon");
+            }
+        }
+    }
 }
