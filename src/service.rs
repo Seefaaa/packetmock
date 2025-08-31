@@ -21,7 +21,10 @@ use windows_service::{
 
 use crate::windivert::intercept;
 
-pub const SERVICE_NAME: &str = "PacketmockService";
+#[cfg(not(debug_assertions))]
+const SERVICE_NAME: &str = "PacketmockSrv";
+#[cfg(debug_assertions)]
+const SERVICE_NAME: &str = "PacketmockDevSrv";
 const SERVICE_DISPLAY_NAME: &str = "Packetmock Service";
 const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
