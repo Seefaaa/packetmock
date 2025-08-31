@@ -4,7 +4,12 @@ use std::{
 };
 
 use color_eyre::Result;
-use windows::UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType};
+use windows::{
+    Foundation::{IReference, PropertyValue},
+    Globalization::Calendar,
+    UI::Notifications::{ToastNotification, ToastNotificationManager, ToastTemplateType},
+    core::Interface,
+};
 use windows_registry::LOCAL_MACHINE;
 
 /// Display name for the toast notification.
@@ -13,6 +18,8 @@ const TOAST_DISPLAY_NAME: &str = "Packetmock";
 const TOAST_APPID: &str = "Seefaaa.Packetmock";
 /// Icon of the toast notification.
 const TOAST_ICON: &[u8] = include_bytes!("../../resources/pink48.png");
+// How long the toast should remain in the action center.
+const TOAST_DURATION: i32 = 10;
 
 /// Show a Windows toast notification with the specified message.
 pub fn show_toast(message: &str) -> Result<()> {
@@ -44,6 +51,11 @@ pub fn show_toast(message: &str) -> Result<()> {
     }
 
     let toast = ToastNotification::CreateToastNotification(&toast_xml)?;
+
+    let now = Calendar::new()?;
+    now.AddSeconds(TOAST_DURATION)?;
+    let dt = now.GetDateTime()?;
+    toast.SetExpirationTime(&PropertyValue::CreateDateTime(dt)?.cast::<IReference<_>>()?)?;
 
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&TOAST_APPID.into())?;
     notifier.Show(&toast)?;
