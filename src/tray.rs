@@ -7,7 +7,10 @@ use std::{
     ptr::null_mut,
 };
 
-use color_eyre::{Result, eyre::Report};
+use color_eyre::{
+    Result,
+    eyre::{Report, bail},
+};
 use log::{error, info};
 use winapi::{
     shared::{guiddef::GUID, windef::HWND},
@@ -50,7 +53,7 @@ pub fn run_tray() -> Result<()> {
     info!("Creating tray");
 
     let window = Window::new(WINDOW_CLASS, WINDOW_TITLE, Some(wnd_proc))?;
-    let tray_icon = TrayIcon::new(&window);
+    let tray_icon = TrayIcon::new(&window)?;
 
     show_toast("Running in system tray")?;
 
@@ -145,7 +148,7 @@ struct TrayIcon {
 
 impl TrayIcon {
     /// Create a new tray icon associated with the given window.
-    fn new(window: &Window) -> Self {
+    fn new(window: &Window) -> Result<Self> {
         let mut notify_icon = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as _,
             hWnd: window.hwnd,
@@ -178,11 +181,14 @@ impl TrayIcon {
         };
 
         unsafe {
-            Shell_NotifyIconW(NIM_ADD, &mut notify_icon);
-            Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon);
+            if Shell_NotifyIconW(NIM_ADD, &mut notify_icon) != 1
+                || Shell_NotifyIconW(NIM_SETVERSION, &mut notify_icon) != 1
+            {
+                bail!("Failed to create tray icon");
+            }
         }
 
-        Self { notify_icon }
+        Ok(Self { notify_icon })
     }
 }
 
