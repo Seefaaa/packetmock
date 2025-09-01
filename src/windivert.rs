@@ -1,3 +1,5 @@
+pub mod ttl;
+
 use std::{borrow::Cow, cmp::Ordering, ffi::CString, mem::zeroed, ptr::null_mut, slice};
 
 use color_eyre::{
@@ -13,10 +15,9 @@ use windivert_sys::{
     WinDivertSend,
 };
 
-use crate::{
-    TTL,
-    http::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST, is_client_hello},
-};
+use crate::http::{FAKE_CLIENT_HELLO, FAKE_HTTP_REQUEST, is_client_hello};
+
+use self::ttl::get_ttl;
 
 pub const WINDIVERT_FILTER: &str = const_format!(
     "outbound and (tcp.DstPort == 80 or tcp.DstPort == 443) and tcp.PayloadLength > 0 and tcp.PayloadLength < {BUFFER_SIZE} and !impostor and !loopback and {LAN_FILTER}"
@@ -341,6 +342,8 @@ pub fn intercept() -> Result<()> {
     let mut buffer = [0; BUFFER_SIZE];
     let mut address: WINDIVERT_ADDRESS = unsafe { zeroed() };
 
+    let ttl = get_ttl();
+
     info!("Intercepting packets");
 
     loop {
@@ -352,7 +355,7 @@ pub fn intercept() -> Result<()> {
                         if packet.data().is_some() {
                             let mut packet_copy = packet.try_clone()?;
                             packet_copy.set_data(FAKE_HTTP_REQUEST)?;
-                            packet_copy.ip_header_mut().TTL = TTL;
+                            packet_copy.ip_header_mut().TTL = ttl;
                             windivert.send(packet_copy)?;
                         }
                     }
@@ -361,7 +364,7 @@ pub fn intercept() -> Result<()> {
                         if is_client_hello(&packet) {
                             let mut packet_copy = packet.try_clone()?;
                             packet_copy.set_data(FAKE_CLIENT_HELLO)?;
-                            packet_copy.ip_header_mut().TTL = TTL;
+                            packet_copy.ip_header_mut().TTL = ttl;
                             windivert.send(packet_copy)?;
                         }
                     }

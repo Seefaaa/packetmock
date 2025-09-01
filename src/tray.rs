@@ -1,5 +1,5 @@
 mod menu;
-mod toast;
+pub mod toast;
 mod window;
 
 use std::{
@@ -34,8 +34,8 @@ use crate::service::{
 
 use self::{
     menu::{
-        MENU_ID_EXIT, MENU_ID_INSTALL_SERVICE, MENU_ID_START_SERVICE, MENU_ID_STOP_SERVICE,
-        MENU_ID_UNINSTALL_SERVICE, show_popup_menu,
+        MENU_ID_EXIT, MENU_ID_INSTALL, MENU_ID_START, MENU_ID_STOP, MENU_ID_UNINSTALL,
+        show_popup_menu,
     },
     toast::show_toast,
     window::Window,
@@ -76,20 +76,20 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
                 if let Err(e) = match show_popup_menu(hwnd) {
-                    Ok(id) => match id {
-                        MENU_ID_START_SERVICE => match start_service() {
+                    Ok(id) => match id as usize {
+                        MENU_ID_START => match start_service() {
                             Ok(_) => toast_ok("Service started"),
                             Err(e) => toast_err("Failed to start service", e),
                         },
-                        MENU_ID_STOP_SERVICE => match stop_service() {
+                        MENU_ID_STOP => match stop_service() {
                             Ok(_) => toast_ok("Service stopped"),
                             Err(e) => toast_err("Failed to stop service", e),
                         },
-                        MENU_ID_INSTALL_SERVICE => match install_service() {
+                        MENU_ID_INSTALL => match install_service() {
                             Ok(_) => toast_ok("Service installed"),
                             Err(e) => toast_err("Failed to install service", e),
                         },
-                        MENU_ID_UNINSTALL_SERVICE => match uninstall_service() {
+                        MENU_ID_UNINSTALL => match uninstall_service() {
                             Ok(_) => toast_ok("Service uninstalled"),
                             Err(e) => toast_err("Failed to uninstall service", e),
                         },

@@ -646,8 +646,10 @@ dependencies = [
  "winapi",
  "windivert-sys",
  "windows",
+ "windows-core",
  "windows-registry",
  "windows-service",
+ "windows-sys 0.60.2",
  "winres",
 ]
 

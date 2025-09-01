@@ -16,7 +16,7 @@ use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 
 use crate::{service::handle_service, tray::run_tray};
 
-const TTL: u8 = 4;
+const REGISTRY_NAME: &str = "Packetmock";
 
 /// Main entry point for the application.
 fn main() -> Result<()> {

@@ -17,9 +17,11 @@ log = "0.4.27"
 const_format = "0.2.34"
 windows-service = "0.8.0"
 smol = "2.0.2"
-windows = { version = "0.61.3", features = ["Data_Xml_Dom", "UI_Notifications", "Foundation", "ApplicationModel_Core", "Storage_Streams", "Globalization"] }
+windows = { version = "0.61.3", features = ["Data_Xml_Dom", "UI_Notifications", "Foundation", "ApplicationModel_Core", "Storage_Streams", "Globalization", "Win32_UI_Notifications", "Win32_System_Com"] }
 windows-registry = "0.5.3"
 ctrlc = { version = "3.4.7", features = ["termination"] }
+windows-sys = "0.60.2"
+windows-core = "0.61.2"
 
 [build-dependencies]
 winres = "0.1.12"
