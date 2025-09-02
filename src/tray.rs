@@ -28,8 +28,13 @@ use winapi::{
 };
 use windows::core::{PCWSTR, w};
 
-use crate::service::{
-    ServiceState, install_service, query_service, start_service, stop_service, uninstall_service,
+use crate::{
+    service::{
+        ServiceState, install_service, query_service, start_service, stop_service,
+        uninstall_service,
+    },
+    tray::menu::MENU_ID_TTL,
+    windivert::ttl::{get_ttl, set_ttl},
 };
 
 use self::{
@@ -47,6 +52,9 @@ const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 
 /// Windows message ID for tray icon callbacks.
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
+
+const MENU_ID_TTL_UP: usize = MENU_ID_TTL + 10;
+const MENU_ID_TTL_DOWN: usize = MENU_ID_TTL - 10;
 
 /// Create a system tray icon and handle its events.
 pub fn run_tray() -> Result<()> {
@@ -108,6 +116,16 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                             PostQuitMessage(0);
 
                             Ok(())
+                        }
+                        MENU_ID_TTL_DOWN..=MENU_ID_TTL_UP => {
+                            let change = (id as isize) - (MENU_ID_TTL as isize);
+                            let new_ttl = (get_ttl() as isize + change).clamp(1, 255) as u8;
+
+                            if let Err(e) = set_ttl(new_ttl) {
+                                toast_err("Failed to set TTL", e)
+                            } else {
+                                show_toast(&format!("Set TTL to {new_ttl}"))
+                            }
                         }
                         _ => Ok(()),
                     },

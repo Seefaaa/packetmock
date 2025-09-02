@@ -1,7 +1,10 @@
-use color_eyre::Result;
+use color_eyre::{Result, eyre::Context};
 use windows_registry::LOCAL_MACHINE;
 
-use crate::REGISTRY_NAME;
+use crate::{
+    REGISTRY_NAME,
+    service::{ServiceState, query_service, start_service, stop_service},
+};
 
 const DEFAULT_TTL: u8 = 4;
 
@@ -16,8 +19,14 @@ pub fn get_ttl() -> u8 {
     }
 }
 
-#[allow(dead_code)]
 pub fn set_ttl(ttl: u8) -> Result<()> {
     let key = LOCAL_MACHINE.create(format!("Software\\{REGISTRY_NAME}"))?;
-    Ok(key.set_u32("TTL", ttl as u32)?)
+    key.set_u32("TTL", ttl as u32)?;
+
+    if let Ok(ServiceState::Running) = query_service() {
+        stop_service().wrap_err("Failed to restart the service")?;
+        start_service().wrap_err("Failed to restart the service")?;
+    };
+
+    Ok(())
 }

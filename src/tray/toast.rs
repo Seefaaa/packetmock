@@ -15,7 +15,7 @@ use windows_registry::LOCAL_MACHINE;
 /// Display name for the toast notification.
 const TOAST_DISPLAY_NAME: &str = "Packetmock";
 /// Application ID for the toast notification.
-const TOAST_APPID: &str = "Seefaaa.Packetmock";
+const TOAST_APPID: &str = "Packetmock_Toast";
 /// Icon of the toast notification.
 const TOAST_ICON: &[u8] = include_bytes!("../../resources/pink48.png");
 // How long the toast should remain in the action center.
