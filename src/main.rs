@@ -2,6 +2,7 @@
 #![windows_subsystem = "windows"]
 
 mod http;
+mod mutex;
 mod service;
 mod tray;
 mod windivert;
@@ -10,11 +11,15 @@ use std::sync::mpsc;
 
 use color_eyre::{Result, config::HookBuilder};
 use env_logger::Env;
-use log::{error, info};
+use log::{error, info, warn};
 use smol::{block_on, future::or, unblock};
 use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 
-use crate::{service::handle_service, tray::run_tray};
+use crate::{
+    mutex::MutexGuard,
+    service::handle_service,
+    tray::{run_tray, toast::show_toast},
+};
 
 const REGISTRY_NAME: &str = "Packetmock";
 
@@ -27,11 +32,21 @@ fn main() -> Result<()> {
 
     handle_service()?;
 
-    block_on(or(unblock(ctrlc_handler()?), unblock(run_tray)))?;
+    let mutex = MutexGuard::new("PacketmockSingleInstance");
+
+    if mutex.is_owned() {
+        block_on(or(unblock(ctrlc_handler()?), unblock(run_tray)))?;
+    } else {
+        let msg = "Another instance is already running.";
+        let _ = show_toast(msg);
+        warn!("{msg} Exiting.");
+    }
 
     if is_terminal {
         unsafe { FreeConsole() };
     }
+
+    drop(mutex);
 
     Ok(())
 }
