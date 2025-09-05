@@ -74,7 +74,7 @@ fn create_settings_menu() -> Result<HMENU> {
 
         let ttl = get_ttl();
 
-        let ttl_text = format!("Set TTL (current: {ttl})");
+        let ttl_text = format!("TTL (current: {ttl})");
         let ttl_wide: Vec<u16> = ttl_text.encode_utf16().chain(once(0)).collect();
 
         AppendMenuW(menu, MF_POPUP, ttl_menu as _, ttl_wide.as_ptr());
@@ -88,13 +88,11 @@ fn create_ttl_menu() -> Result<HMENU> {
     unsafe {
         let menu = CreatePopupMenu();
 
-        AppendMenuW(menu, MF_STRING, MENU_ID_TTL + 10, w!("Increment (+10)"));
         AppendMenuW(menu, MF_STRING, MENU_ID_TTL + 5, w!("Increment (+5)"));
         AppendMenuW(menu, MF_STRING, MENU_ID_TTL + 1, w!("Increment (+1)"));
         AppendMenuW(menu, MF_SEPARATOR, 0, null());
         AppendMenuW(menu, MF_STRING, MENU_ID_TTL - 1, w!("Decrement (-1)"));
         AppendMenuW(menu, MF_STRING, MENU_ID_TTL - 5, w!("Decrement (-5)"));
-        AppendMenuW(menu, MF_STRING, MENU_ID_TTL - 10, w!("Decrement (-10)"));
 
         Ok(menu)
     }

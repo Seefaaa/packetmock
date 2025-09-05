@@ -53,9 +53,6 @@ const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 /// Windows message ID for tray icon callbacks.
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
-const MENU_ID_TTL_UP: usize = MENU_ID_TTL + 10;
-const MENU_ID_TTL_DOWN: usize = MENU_ID_TTL - 10;
-
 /// Create a system tray icon and handle its events.
 pub fn run_tray() -> Result<()> {
     info!("Creating tray");
@@ -83,6 +80,9 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
         WMAPP_NOTIFYCALLBACK => match lparam as u32 {
             WM_LBUTTONUP => {}
             WM_RBUTTONUP => unsafe {
+                const MENU_ID_TTL_UP: usize = MENU_ID_TTL + 5;
+                const MENU_ID_TTL_DOWN: usize = MENU_ID_TTL - 5;
+
                 if let Err(e) = match show_popup_menu(hwnd) {
                     Ok(id) => match id as usize {
                         MENU_ID_START => match start_service() {
