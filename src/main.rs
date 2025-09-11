@@ -4,20 +4,23 @@
 mod http;
 mod mutex;
 mod service;
+mod tasksch;
 mod tray;
 mod windivert;
 
-use std::sync::mpsc;
+use std::{env::args_os, sync::mpsc};
 
 use color_eyre::{Result, config::HookBuilder};
 use env_logger::Env;
 use log::{error, info, warn};
 use smol::{block_on, future::or, unblock};
 use winapi::um::wincon::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
+use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
 
 use crate::{
     mutex::MutexGuard,
     service::handle_service,
+    tasksch::Scheduler,
     tray::{run_tray, toast::show_toast},
 };
 
@@ -32,13 +35,28 @@ fn main() -> Result<()> {
 
     handle_service()?;
 
+    let silent = args_os().any(|arg| arg == "--task" || arg == "-t");
+
     let mutex = MutexGuard::new("PacketmockSingleInstance");
 
     if mutex.is_owned() {
-        block_on(or(unblock(ctrlc_handler()?), unblock(run_tray)))?;
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()? };
+
+        Scheduler::create_if_should()?;
+
+        block_on(or(
+            unblock(ctrlc_handler()?),
+            unblock(move || run_tray(silent)),
+        ))?;
+
+        unsafe { CoUninitialize() };
     } else {
         let msg = "Another instance is already running.";
-        let _ = show_toast(msg);
+
+        if !silent {
+            let _ = show_toast(msg);
+        }
+
         warn!("{msg} Exiting.");
     }
 

@@ -11,9 +11,9 @@ use winapi::{
         winnt::LPWSTR,
         winuser::{
             AppendMenuW, CreatePopupMenu, DestroyMenu, GetCursorPos, InsertMenuItemW,
-            MENUITEMINFOW, MF_POPUP, MF_SEPARATOR, MF_STRING, MFS_DEFAULT, MIIM_STATE, MIIM_STRING,
-            SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD,
-            TrackPopupMenuEx,
+            MENUITEMINFOW, MF_CHECKED, MF_POPUP, MF_SEPARATOR, MF_STRING, MF_UNCHECKED,
+            MFS_DEFAULT, MIIM_STATE, MIIM_STRING, SetForegroundWindow, TPM_BOTTOMALIGN,
+            TPM_LEFTALIGN, TPM_NONOTIFY, TPM_RETURNCMD, TrackPopupMenuEx,
         },
     },
 };
@@ -21,6 +21,7 @@ use windows_sys::w;
 
 use crate::{
     service::{ServiceState, query_service},
+    tasksch::run_on_startup,
     windivert::ttl::get_ttl,
 };
 
@@ -30,6 +31,7 @@ pub const MENU_ID_UNINSTALL: usize = 1002;
 pub const MENU_ID_START: usize = 1003;
 pub const MENU_ID_INSTALL: usize = 1004;
 pub const MENU_ID_TTL: usize = 2000;
+pub const MENU_ID_STARTUP: usize = 3000;
 
 /// Create the popup menu based on the current service state.
 fn create_popup_menu() -> Result<HMENU> {
@@ -78,6 +80,19 @@ fn create_settings_menu() -> Result<HMENU> {
         let ttl_wide: Vec<u16> = ttl_text.encode_utf16().chain(once(0)).collect();
 
         AppendMenuW(menu, MF_POPUP, ttl_menu as _, ttl_wide.as_ptr());
+
+        let checked = if run_on_startup() {
+            MF_CHECKED
+        } else {
+            MF_UNCHECKED
+        };
+
+        AppendMenuW(
+            menu,
+            MF_STRING | checked,
+            MENU_ID_STARTUP,
+            w!("Show tray on startup"),
+        );
 
         Ok(menu)
     }

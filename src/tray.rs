@@ -33,7 +33,8 @@ use crate::{
         ServiceState, install_service, query_service, start_service, stop_service,
         uninstall_service,
     },
-    tray::menu::MENU_ID_TTL,
+    tasksch::{run_on_startup, set_run_on_startup},
+    tray::menu::{MENU_ID_STARTUP, MENU_ID_TTL},
     windivert::ttl::{get_ttl, set_ttl},
 };
 
@@ -54,13 +55,15 @@ const WINDOW_CLASS: PCWSTR = w!("packetmockwndcls");
 const WMAPP_NOTIFYCALLBACK: u32 = WM_APP + 1;
 
 /// Create a system tray icon and handle its events.
-pub fn run_tray() -> Result<()> {
+pub fn run_tray(silent: bool) -> Result<()> {
     info!("Creating tray");
 
     let window = Window::new(WINDOW_CLASS, WINDOW_TITLE, Some(wnd_proc))?;
     let tray_icon = TrayIcon::new(&window)?;
 
-    show_toast("Running in system tray")?;
+    if !silent {
+        show_toast("Running in system tray")?;
+    }
 
     window.event_loop();
 
@@ -125,6 +128,17 @@ unsafe extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: usize, lparam: 
                                 toast_err("Failed to set TTL", e)
                             } else {
                                 show_toast(&format!("Set TTL to {new_ttl}"))
+                            }
+                        }
+                        MENU_ID_STARTUP => {
+                            let run = !run_on_startup();
+
+                            if let Err(e) = set_run_on_startup(run) {
+                                toast_err("Failed to set startup option", e)
+                            } else if run {
+                                show_toast("Tray icon will be shown on startup (if installed)")
+                            } else {
+                                show_toast("Tray icon will not be shown on startup")
                             }
                         }
                         _ => Ok(()),

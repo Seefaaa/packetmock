@@ -20,7 +20,7 @@ use windows_service::{
     service_manager::{ServiceManager, ServiceManagerAccess},
 };
 
-use crate::windivert::intercept;
+use crate::{tasksch::Scheduler, windivert::intercept};
 
 /// Name of the Windows service.
 #[cfg(not(debug_assertions))]
@@ -131,6 +131,8 @@ pub fn install_service() -> Result<()> {
     let service = manager.create_service(&service_info, ServiceAccess::CHANGE_CONFIG)?;
     service.set_description(env!("CARGO_PKG_DESCRIPTION"))?;
 
+    Scheduler::create_if_should()?;
+
     Ok(())
 }
 
@@ -140,6 +142,8 @@ pub fn uninstall_service() -> Result<()> {
     let service = manager.open_service(SERVICE_NAME, ServiceAccess::DELETE)?;
 
     service.delete()?;
+
+    Scheduler::delete()?;
 
     Ok(())
 }
